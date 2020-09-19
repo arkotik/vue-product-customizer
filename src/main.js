@@ -1,5 +1,9 @@
 import Vue from 'vue'
 import App from './App.vue'
+import VueKonva from 'vue-konva'
+import './assets/styles.css';
+
+Vue.use(VueKonva)
 
 Vue.config.productionTip = false
 
