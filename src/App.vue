@@ -1,10 +1,10 @@
 <template>
-    <div class="layout">
-        <header />
-        <section class="content">
-            <editor />
-        </section>
-    </div>
+  <div class="layout">
+    <header/>
+    <section class="content">
+      <Editor/>
+    </section>
+  </div>
 </template>
 
 <script>
