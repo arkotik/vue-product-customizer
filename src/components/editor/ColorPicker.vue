@@ -69,10 +69,10 @@ export default {
   },
   methods: {
     submit() {
-      this.emit(this.normalized);
+      this.emit(this.normalized, true);
     },
     onChange(e) {
-      this.emit(clearHash(e.target.value));
+      `this.emit`(clearHash(e.target.value), true);
     },
     onInput(e) {
       const { value } = e.target;
@@ -80,18 +80,37 @@ export default {
         e.target.value = clearHash(value);
       }
     },
-    emit(value) {
+    emit(value, update = false) {
       const hex = normalizeHexColor(value);
       if (isValidHexColor(hex)) {
         this.$emit('change', hex);
-        this.updateSlider(hex);
-        this.updateMap(hex);
+        if (update) {
+          this.updatePipkasFromColor(hex);
+        }
       } else {
         console.error(`Invalid value: ${hex}`);
       }
     },
-    updateSlider(hex) {
+    updatePipkasFromHSV({ h, s, v }) {
+      if (h !== void 0) {
+        this.slider.left = h / 360 * 100;
+        this.colorMap.base = hsvToHEX({ h, s: 1, v: 1 });
+      }
+      if (s !== void 0) {
+        this.colorMap.left = s * 100;
+      }
+      if (v !== void 0) {
+        this.colorMap.bottom = v * 100;
+      }
+    },
+    updatePipkasFromColor(hex) {
       this.slider.left = this.getSliderPipkaPos(hex);
+      const { h, s, v } = rgbToHSV(hex);
+      this.colorMap = {
+        base: hsvToHEX({ h, s: 1, v: 1 }),
+        left: s * 100,
+        bottom: v * 100,
+      };
     },
     initSlider() {
       const { sliderTrack, sliderPipka } = this.$refs;
@@ -105,10 +124,6 @@ export default {
         }
         return px / width;
       };
-      window.addEventListener('resize', () => {
-        this.initSlider();
-      });
-      this.updateSlider(this.value);
       const updHandler = (e) => {
         const h = calcPos(sliderTrack, { x: e.clientX });
         this.slider.left = h * 100;
@@ -148,6 +163,7 @@ export default {
       if (v !== void 0) {
         hsv.v = v;
       }
+      this.updatePipkasFromHSV(hsv);
       this.emit(hsvToHEX(hsv));
     },
     initColorMap() {
@@ -190,17 +206,7 @@ export default {
         window.addEventListener('mousemove', updHandler);
         window.addEventListener('mouseup', onUp);
       };
-      this.updateMap(this.value);
     },
-    updateMap(hex) {
-      const { width, height } = this.$refs.colorMap.getBoundingClientRect();
-      const { h, s, v } = rgbToHSV(hex);
-      this.colorMap = {
-        base: hsvToHEX({ h, s: 1, v: 1 }),
-        left: (width * s) / width * 100,
-        bottom: (height * v) / height * 100,
-      };
-    }
   },
   data() {
     return {
@@ -217,6 +223,11 @@ export default {
   mounted() {
     this.initSlider();
     this.initColorMap();
+    window.addEventListener('resize', () => {
+      this.initSlider();
+      this.initColorMap();
+    });
+    this.updatePipkasFromColor(this.value);
   }
 };
 </script>

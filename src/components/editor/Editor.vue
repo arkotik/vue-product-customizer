@@ -270,7 +270,7 @@ export default {
       underlayConfig: {
         width: 200,
         height: 200,
-        fill: '#ff0000',
+        fill: '#ffffff',
         strokeEnabled: false,
         strokeWidth: 0
       },
@@ -345,6 +345,9 @@ export default {
         };
         this.addShape(SHAPE_IMAGE, imgConf);
       };
+    });
+    window.addEventListener('click', () => {
+      this.activeShape = null;
     });
   },
 };

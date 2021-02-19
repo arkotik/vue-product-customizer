@@ -202,7 +202,9 @@ export function rgbToHSV(color) {
   const s = max === 0 ? 0 : 1 - min / max;
   let h = 0;
   const dif = max - min;
-  if (max === r && g >= b) {
+  if (dif === 0) {
+    h = 0;
+  } else if (max === r && g >= b) {
     h = 60 * ((g - b) / dif);
   } else if (max === r && g < b) {
     h = 60 * ((g - b) / dif) + 360;
