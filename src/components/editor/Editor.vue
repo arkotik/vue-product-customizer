@@ -36,6 +36,9 @@
     </div>
     <div class="canvas-handler">
       <v-stage :config="editorConfig">
+        <v-layer ref="backLayer">
+          <v-rect :config="underlayConfig" ref="underlay" />
+        </v-layer>
         <v-layer ref="stuffLayer">
           <template v-for="(item, i) of shapes">
             <v-image v-if="item.shape === 'image'" :config="item.config" :key="i" ref="shapes"/>
@@ -54,13 +57,26 @@
       </v-stage>
     </div>
     <div class="panel right-panel">
-
+      <div class="tabs">
+        <template v-for="(tab, i) in settingsTabs.tabs">
+          <div class="tab-tile" :class="{ active: tab.id === settingsTabs.active }" @click="settingsTabs.active = tab.id" :key="i">{{ tab.title }}</div>
+        </template>
+      </div>
+      <div class="tools-handler" :class="[`${settingsTabs.active}-content`]">
+        <div class="tools-panel" v-if="settingsTabs.active === 'tab-product'">
+          <div class="tools-group">
+            <ColorPicker title="Background" v-model="underlayConfig.fill" />
+          </div>
+        </div>
+        <div class="tools-panel" v-if="settingsTabs.active === 'tab-object'"></div>
+      </div>
     </div>
     <input type="file" accept="image/*" hidden ref="fileInput">
   </div>
 </template>
 
 <script>
+import ColorPicker from '@/components/editor/ColorPicker';
 const snaps = Array(4)
   .fill([0, 30, 45, 60, 90])
   .reduce((acc, cur, i) => [...acc, ...cur.map(el => el + (i * 90))], []);
@@ -111,6 +127,7 @@ const listenersMap = [
 ];
 export default {
   name: 'Editor',
+  components: { ColorPicker },
   methods: {
     clearAll() {
       this.removeTransformer();
@@ -250,6 +267,13 @@ export default {
         width: 200,
         height: 200
       },
+      underlayConfig: {
+        width: 200,
+        height: 200,
+        fill: '#ff0000',
+        strokeEnabled: false,
+        strokeWidth: 0
+      },
       shapes: [],
       tplImage: {
         image: null
@@ -262,6 +286,13 @@ export default {
       },
       activeShape: null,
       next: getCounter(),
+      settingsTabs: {
+        active: 'tab-product',
+        tabs: [
+          { id: 'tab-product', title: 'Product' },
+          { id: 'tab-object', title: 'Object' },
+        ],
+      }
     };
   },
   created() {
@@ -276,8 +307,8 @@ export default {
         scaleX: 1,
         scaleY: 1,
       };
-      this.editorConfig.width = tpl.width;
-      this.editorConfig.height = tpl.height;
+      this.editorConfig.width = this.underlayConfig.width = tpl.width;
+      this.editorConfig.height = this.underlayConfig.height = tpl.height;
     };
   },
   mounted() {
