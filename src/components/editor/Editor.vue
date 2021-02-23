@@ -3,20 +3,22 @@
     <div class="panel left-panel">
       <div class="control-buttons">
         <div class="buttons-group">
-          <div class="button primary" @click="addImage">+ Image</div>
-          <div class="button primary" @click="addText">+ Text</div>
+          <div class="button primary" @click.stop="addImage">+ Image</div>
+          <div class="button primary" @click.stop="addText">+ Text</div>
         </div>
         <div class="buttons-group">
-          <div class="button danger" @click="clearAll">Clear all</div>
+          <div class="button danger" @click.stop="clearAll">Clear all</div>
         </div>
       </div>
       <div class="items-list">
         <template v-for="(item, i) of shapes">
-          <div :key="i" class="item" :class="{ active: activeShape === item.id}" @click="setActive(item)">
+          <div :key="i" class="item" :class="{ active: activeShape === item.id}" @click.stop="setActive(item)">
             <div class="thumb">
               <div v-if="item.shape === 'image'" :style="`background-image: url(${item.config.image.src}) !important`" :class="[item.shape]"/>
               <div v-if="item.shape === 'text'" :class="[item.shape]">
-                <svg viewBox="0 0 1024 1024"><path d="M213.333 170.667v128h234.667v512h128v-512h234.667v-128z"></path></svg>
+                <svg viewBox="0 0 1024 1024">
+                  <path d="M213.333 170.667v128h234.667v512h128v-512h234.667v-128z"></path>
+                </svg>
               </div>
             </div>
             <div class="content">
@@ -27,36 +29,29 @@
                 <button class="action action-button down" title="Back One" @click.stop="arrangeItem(item, -1)" :disabled="shapes.length < 2"/>
                 <button class="action action-button to-bottom" title="Send to Back" @click.stop="arrangeItem(item, -Infinity)" :disabled="shapes.length < 2"/>
                 <div class="divider"/>
-                <button class="action action-button remove" title="Remove" @click.stop="removeItem(item.id)"/>
+                <button class="action action-button remove" title="Remove" @click.stop="removeItem(item)"/>
               </div>
             </div>
           </div>
         </template>
       </div>
     </div>
-    <div class="canvas-handler">
+    <div class="canvas-handler" ref="canvasArea">
       <v-stage :config="editorConfig">
         <v-layer ref="backLayer">
-          <v-rect :config="underlayConfig" ref="underlay" />
+          <v-rect :config="underlayConfig" ref="underlay"/>
         </v-layer>
-        <v-layer ref="stuffLayer">
-          <template v-for="(item, i) of shapes">
-            <v-image v-if="item.shape === 'image'" :config="item.config" :key="i" ref="shapes"/>
-            <v-text v-if="item.shape === 'text'" :config="item.config" :key="i" ref="shapes"/>
-          </template>
-        </v-layer>
+        <v-layer ref="stuffLayer"/>
         <v-layer ref="tplLayer">
           <v-image :config="tplImage"/>
         </v-layer>
-        <v-layer ref="controlLayer">
-          <template v-for="(item, i) of shapes">
-            <v-rect :config="getPhantomConfig(item)" :key="i" @mousedown="e => onShapeMouseDown(e, item)" ref="phantoms"/>
-          </template>
+        <v-layer ref="controlLayer"/>
+        <v-layer ref="transformerLayer">
           <v-transformer ref="transformer" :config="transformerConfig"/>
         </v-layer>
       </v-stage>
     </div>
-    <div class="panel right-panel">
+    <div class="panel right-panel" ref="rightPanel">
       <div class="tabs">
         <template v-for="(tab, i) in settingsTabs.tabs">
           <div class="tab-tile" :class="{ active: tab.id === settingsTabs.active }" @click="settingsTabs.active = tab.id" :key="i">{{ tab.title }}</div>
@@ -65,18 +60,32 @@
       <div class="tools-handler" :class="[`${settingsTabs.active}-content`]">
         <div class="tools-panel" v-if="settingsTabs.active === 'tab-product'">
           <div class="tools-group">
-            <ColorPicker title="Background" v-model="underlayConfig.fill" />
+            <ColorPicker title="Background" v-model="underlayConfig.fill"/>
           </div>
         </div>
-        <div class="tools-panel" v-if="settingsTabs.active === 'tab-object'"></div>
+        <div class="tools-panel" v-if="settingsTabs.active === 'tab-object'">
+          <template v-if="activeShape === null">
+            <span style="text-align: center; padding: 15px 0;">Please select an objet</span>
+          </template>
+          <template v-if="activeType === 'text'">
+            <div class="tools-group">
+              <TextForm :attrs="activeItem.node.attrs" :onInput="updateAttribute"/>
+            </div>
+          </template>
+        </div>
       </div>
     </div>
-    <input type="file" accept="image/*" hidden ref="fileInput">
+    <form action="javascript:void(0)" ref="imageForm">
+      <input type="file" accept="image/*" hidden ref="fileInput">
+    </form>
   </div>
 </template>
 
 <script>
 import ColorPicker from '@/components/editor/ColorPicker';
+import Konva from 'konva';
+import TextForm from '@/components/editor/forms/TextForm';
+
 const snaps = Array(4)
   .fill([0, 30, 45, 60, 90])
   .reduce((acc, cur, i) => [...acc, ...cur.map(el => el + (i * 90))], []);
@@ -87,16 +96,17 @@ function getCounter() {
 }
 
 const SHAPE_IMAGE = 'image';
-const SHAPE_TEXT= 'text';
-// const SHAPE_RECT = 'rect';
+const SHAPE_TEXT = 'text';
 
 function getTextConfig(config = {}) {
   return {
     x: 0,
     y: 0,
-    text: 'VaporFly',
+    text: 'Your Text',
     fontSize: 14,
-    align: 'center',
+    align: 'left',
+    scaleX: 1,
+    scaleY: 1,
     // fontFamily: 'Arial',
     // fontStyle: 'normal',
     // fontVariant: 'normal',
@@ -115,7 +125,7 @@ function getTextConfig(config = {}) {
     // opacity: 1.0,
     // rotation: 0,
     ...config,
-  }
+  };
 }
 
 const listenersMap = [
@@ -127,25 +137,25 @@ const listenersMap = [
 ];
 export default {
   name: 'Editor',
-  components: { ColorPicker },
+  components: { TextForm, ColorPicker },
   methods: {
     clearAll() {
       this.removeTransformer();
       this.activeShape = null;
+      for (const { node, phantom } of this.shapes) {
+        node.destroy();
+        phantom.destroy();
+      }
+      this.controlLayer.batchDraw();
+      this.stuffLayer.batchDraw();
       this.shapes = [];
-    },
-    getIndex(id) {
-      return this.shapes.findIndex(el => el.id === id);
     },
     getItemById(id) {
       return this.shapes.find(el => el.id === id);
     },
     getNodeById(id) {
-      const index = this.getIndex(id);
-      return {
-        phantom: this.$refs.phantoms[index]?.getNode(),
-        shape: this.$refs.shapes[index]?.getNode(),
-      };
+      const { node: shape, phantom } = this.getItemById(id);
+      return { phantom, shape };
     },
     arrangeItem(item, to) {
       const { phantom, shape } = this.getNodeById(item.id);
@@ -167,11 +177,12 @@ export default {
       shape.zIndex(zIndex);
       phantom.zIndex(zIndex);
       this.stuffLayer.batchDraw();
+      this.controlLayer.batchDraw();
+      this.transformerLayer.batchDraw();
     },
     getPhantomConfig(item) {
-      const { shape, config: { image, x, y, scaleX, scaleY, width, height, ...rest } } = item;
+      const { shape, config: { image, x, y, scaleX, scaleY, width, height } } = item;
       const data = {
-        ...rest,
         x,
         y,
         scaleX,
@@ -179,7 +190,9 @@ export default {
         width,
         height,
         draggable: true,
-        strokeWidth: 0,
+        strokeWidth: 1,
+        strokeEnabled: false,
+        stroke: '#000000',
       };
       if (shape === 'image') {
         if (data.width === void 0) {
@@ -195,70 +208,123 @@ export default {
       this.$refs.fileInput.click();
     },
     addText() {
-      const { width, height } = this.editorConfig;
-      const size = 32;
       const config = getTextConfig({
-        y: ~~((height / 2) - (size / 2)),
-        width,
-        height: size,
-        fontSize: size
+        fontSize: 32,
+        text: 'Your Text',
       });
       this.addShape(SHAPE_TEXT, config);
     },
-    setTransformer(node, item) {
+    setActive(item) {
+      this.setTransformer(item);
+      this.settingsTabs.active = 'tab-object';
+    },
+    setTransformer(item) {
+      const { phantom, node, config, id, shape } = item;
       const prev = this.activeShape;
       if (item.id === prev) {
         return;
       }
-      this.activeShape = item.id;
+      this.activeShape = id;
       if (prev !== null) {
         const { phantom } = this.getNodeById(prev);
         listenersMap.forEach(([event]) => phantom.removeEventListener(event));
       }
-      listenersMap.forEach(([event, attribute]) => node.addEventListener(event, () => {
-        item.config[attribute] = node.attrs[attribute];
+      listenersMap.forEach(([event, attribute]) => phantom.addEventListener(event, () => {
+        config[attribute] = phantom.attrs[attribute];
+        node.setAttr(attribute, phantom.attrs[attribute]);
+        node.draw();
+        this.stuffLayer.draw();
       }));
-      this.transformer.setNodes([node]);
-      this.controlLayer.batchDraw();
-      this.transformer.zIndex(this.controlLayer.children.length - 1);
-    },
-    onShapeMouseDown(e, item) {
-      this.setTransformer(e.target, item);
-    },
-    setActive(item) {
-      const shapes = this.$refs.phantoms || [];
-      const index = this.shapes.findIndex(el => el.id === item.id);
-      const el = shapes[index];
-      if (!el) {
-        console.error('Can not get element');
-        return;
-      }
-      this.setTransformer(el.getNode(), item);
+      this.$set(this.$data, 'transformerConfig', { ...this.transformerConfig, resizeEnabled: shape !== SHAPE_TEXT });
+      this.transformer.setNodes([phantom]);
+      this.transformerLayer.batchDraw();
+      this.stuffLayer.batchDraw();
     },
     removeTransformer() {
       this.transformer.setNodes([]);
-      this.stuffLayer.batchDraw();
+      this.transformerLayer.batchDraw();
     },
-    removeItem(id) {
-      if (this.activeShape === id) {
+    removeItem(item) {
+      if (this.activeShape === item.id) {
         this.removeTransformer();
       }
+      const { node, phantom } = item;
+      node.destroy();
+      phantom.destroy();
       this.activeShape = null;
-      this.shapes = this.shapes.filter(el => el.id !== id);
+      this.shapes = this.shapes.filter(el => el.id !== item.id);
+      this.stuffLayer.batchDraw();
+      this.controlLayer.batchDraw();
     },
     addShape(shape, config, extra = {}) {
-      this.shapes = [...this.shapes, { ...(extra || {}), shape, config, id: this.next() }];
-    }
+      const { width, height } = this.editorConfig;
+      const item = { ...(extra || {}), shape, config, id: this.next() };
+      if (shape === SHAPE_IMAGE) {
+        item.node = new Konva.Image(config);
+      } else if (shape === SHAPE_TEXT) {
+        item.node = new Konva.Text(config);
+        const tw = item.node.getTextWidth();
+        const th = item.node.height();
+        config.width = tw;
+        config.height = th;
+        config.x = ~~((width / 2) - (tw / 2));
+        config.y = ~~((height / 2) - (th / 2));
+        item.node.setAttrs(config);
+      }
+      item.phantom = new Konva.Rect(this.getPhantomConfig(item));
+
+      this.controlLayer.add(item.phantom);
+      this.stuffLayer.add(item.node);
+
+      this.stuffLayer.batchDraw();
+      this.controlLayer.batchDraw();
+
+      this.shapes.unshift(item);
+
+      item.phantom.addEventListener('mousedown', () => this.setActive(item));
+      this.setActive(item);
+    },
+    updateAttribute(attribute, value) {
+      const { config, node, shape, phantom } = this.activeItem;
+      config[attribute] = value;
+      if (shape === SHAPE_TEXT && attribute === 'text') {
+        const { height } = node.measureSize(value);
+        const lines = value.split('\n');
+        config.width = Math.max(...lines.map(lineText => node.measureSize(lineText).width));
+        config.height = lines.length * height;
+        config.scaleX = 1;
+        config.scaleY = 1;
+      }
+      node.setAttrs(config);
+      node.draw();
+      this.stuffLayer.draw();
+      this.transformerLayer.batchDraw();
+      this.updatePhantomSize(phantom, config);
+    },
+    updatePhantomSize(phantom, config) {
+      const { x, y, width, height, scaleX, scaleY, rotation } = config;
+      phantom.setAttrs({ x, y, width, height, scaleX, scaleY, rotation });
+      this.controlLayer.batchDraw();
+    },
   },
   computed: {
     transformer() {
-      return this.$refs.transformer.getNode();
+      return this.$refs?.transformer?.getNode();
     },
     stuffLayer() {
       return this.$refs.stuffLayer.getNode();
     },
     controlLayer() {
       return this.$refs.controlLayer.getNode();
+    },
+    transformerLayer() {
+      return this.$refs.transformerLayer.getNode();
+    },
+    activeItem() {
+      return this.getItemById(this.activeShape) || null;
+    },
+    activeType() {
+      return this.activeItem?.shape || null;
     },
   },
   data() {
@@ -283,6 +349,7 @@ export default {
         keepRatio: true,
         anchorSize: 10,
         rotationSnaps: snaps,
+        // padding: 5
       },
       activeShape: null,
       next: getCounter(),
@@ -335,19 +402,23 @@ export default {
         const size = Math.max(img.width, img.height);
         const fit = Math.min(width, height);
         const scale = fit < size ? fit / size : 1;
-        const imgConf = {
+        this.addShape(SHAPE_IMAGE, {
           image: img,
           x: 10,
           y: 10,
           scaleX: scale,
           scaleY: scale,
           draggable: false,
-        };
-        this.addShape(SHAPE_IMAGE, imgConf);
+        });
+        this.$refs.imageForm.reset();
       };
     });
-    window.addEventListener('click', () => {
+    this.$refs.canvasArea.addEventListener('click', e => e.stopPropagation());
+    this.$refs.rightPanel.addEventListener('click', e => e.stopPropagation());
+    document.body.addEventListener('click', () => {
       this.activeShape = null;
+      this.removeTransformer();
+      this.settingsTabs.active = 'tab-product';
     });
   },
 };

@@ -232,71 +232,9 @@ export default {
 };
 </script>
 
-<style type="text/css" lang="scss" scoped>
+<style type="text/css" lang="scss">
 .color-picker {
   padding: 0 10px;
-}
-
-.input-group {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-
-  .input-label {
-    width: 100%;
-    padding: 5px 0 10px 0;
-    font-size: 1.2em;
-  }
-
-  .input-field {
-    width: 100%;
-    display: flex;
-    flex-direction: row;
-
-    &.text-with-button {
-      label {
-        display: inline-flex;
-        border: 1px solid var(--c-primary);
-        border-radius: 4px 0 0 4px;
-        overflow: hidden;
-        position: relative;
-        align-items: center;
-        border-right: none;
-
-        &:before {
-          content: '#';
-          display: inline;
-          left: 0;
-          margin: 0 10px;
-          position: relative;
-        }
-
-        input {
-          width: 100%;
-          height: 100%;
-          border: none;
-          outline: none;
-          font-family: monospace;
-          letter-spacing: 1px;
-          text-transform: lowercase;
-        }
-      }
-
-      .button {
-        display: inline-block;
-        max-width: 30%;
-        min-width: fit-content;
-        padding: 8px 10px;
-        border-radius: 0 4px 4px 0;
-        outline: none;
-        border: none;
-        font-weight: bolder;
-        background: var(--c-primary);
-        color: white;
-        cursor: pointer;
-      }
-    }
-  }
 }
 
 .slider-wrapper {
