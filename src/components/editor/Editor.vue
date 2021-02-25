@@ -107,9 +107,9 @@ function getTextConfig(config = {}) {
     align: 'left',
     scaleX: 1,
     scaleY: 1,
-    // fontFamily: 'Arial',
-    // fontStyle: 'normal',
-    // fontVariant: 'normal',
+    fontFamily: 'Arial',
+    fontStyle: 'normal',
+    fontVariant: 'normal',
     // textDecoration: '',
     // verticalAlign: 'top',
     // padding: 0,
@@ -135,6 +135,14 @@ const listenersMap = [
   ['scaleYChange', 'scaleY'],
   ['rotationChange', 'rotation'],
 ];
+
+// eslint-disable-next-line no-unused-vars
+async function sleep(t = 0) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, t);
+  });
+}
+
 export default {
   name: 'Editor',
   components: { TextForm, ColorPicker },
@@ -236,7 +244,7 @@ export default {
         this.stuffLayer.draw();
       }));
       this.$set(this.$data, 'transformerConfig', { ...this.transformerConfig, resizeEnabled: shape !== SHAPE_TEXT });
-      this.transformer.setNodes([phantom]);
+      this.transformer?.setNodes([phantom]);
       this.transformerLayer.batchDraw();
       this.stuffLayer.batchDraw();
     },
@@ -284,20 +292,23 @@ export default {
       item.phantom.addEventListener('mousedown', () => this.setActive(item));
       this.setActive(item);
     },
-    updateAttribute(attribute, value) {
+    async updateAttribute(attribute, value) {
       const { config, node, shape, phantom } = this.activeItem;
       config[attribute] = value;
-      if (shape === SHAPE_TEXT && attribute === 'text') {
-        const { height } = node.measureSize(value);
-        const lines = value.split('\n');
+      if (shape === SHAPE_TEXT) {
+        node.setAttr(attribute, value);
+        const text = node.text();
+        const { height } = node.measureSize(text);
+        const lines = text.split('\n');
         config.width = Math.max(...lines.map(lineText => node.measureSize(lineText).width));
         config.height = lines.length * height;
         config.scaleX = 1;
         config.scaleY = 1;
+        config.x = node.attrs.x - ~~((config.width - node.attrs.width) / 2);
+        config.y = node.attrs.y - ~~((config.height - node.attrs.height) / 2);
       }
       node.setAttrs(config);
-      node.draw();
-      this.stuffLayer.draw();
+      this.stuffLayer.batchDraw();
       this.transformerLayer.batchDraw();
       this.updatePhantomSize(phantom, config);
     },
@@ -349,7 +360,7 @@ export default {
         keepRatio: true,
         anchorSize: 10,
         rotationSnaps: snaps,
-        // padding: 5
+        padding: 5
       },
       activeShape: null,
       next: getCounter(),

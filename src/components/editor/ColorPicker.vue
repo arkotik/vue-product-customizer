@@ -233,10 +233,6 @@ export default {
 </script>
 
 <style type="text/css" lang="scss">
-.color-picker {
-  padding: 0 10px;
-}
-
 .slider-wrapper {
   padding: 15px 0;
 
@@ -276,8 +272,8 @@ export default {
 }
 
 .color-map-wrapper {
-  padding: 15px 0;
   position: relative;
+  height: 100px;
 
   .color-map {
     height: 100px;

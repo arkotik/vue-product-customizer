@@ -416,6 +416,7 @@ section.content {
       resize: none;
       padding: 3px;
       border-radius: 3px;
+      border: 1px solid var(--c-primary);
 
       &:focus {
         background-color: #F4FFC2;
