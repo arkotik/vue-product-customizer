@@ -36,20 +36,22 @@
         </template>
       </div>
     </div>
-    <div class="canvas-handler" ref="canvasArea">
-      <v-stage :config="editorConfig">
-        <v-layer ref="backLayer">
-          <v-rect :config="underlayConfig" ref="underlay"/>
-        </v-layer>
-        <v-layer ref="stuffLayer"/>
-        <v-layer ref="tplLayer">
-          <v-image :config="tplImage"/>
-        </v-layer>
-        <v-layer ref="controlLayer"/>
-        <v-layer ref="transformerLayer">
-          <v-transformer ref="transformer" :config="transformerConfig"/>
-        </v-layer>
-      </v-stage>
+    <div class="editor-area">
+      <div class="canvas-wrapper" ref="canvasArea">
+        <v-stage :config="editorConfig">
+          <v-layer ref="backLayer">
+            <v-rect :config="underlayConfig" ref="underlay"/>
+          </v-layer>
+          <v-layer ref="stuffLayer"/>
+          <v-layer ref="tplLayer">
+            <v-image :config="tplImage"/>
+          </v-layer>
+          <v-layer ref="controlLayer"/>
+          <v-layer ref="transformerLayer">
+            <v-transformer ref="transformer" :config="transformerConfig"/>
+          </v-layer>
+        </v-stage>
+      </div>
     </div>
     <div class="panel right-panel" ref="rightPanel">
       <div class="tabs">
@@ -60,7 +62,9 @@
       <div class="tools-handler" :class="[`${settingsTabs.active}-content`]">
         <div class="tools-panel" v-if="settingsTabs.active === 'tab-product'">
           <div class="tools-group">
-            <ColorPicker title="Background" v-model="underlayConfig.fill"/>
+            <div style="padding: 0 5px">
+              <ColorPicker title="Background" v-model="underlayConfig.fill"/>
+            </div>
           </div>
         </div>
         <div class="tools-panel" v-if="settingsTabs.active === 'tab-object'">
@@ -141,6 +145,23 @@ async function sleep(t = 0) {
   return new Promise((resolve) => {
     setTimeout(resolve, t);
   });
+}
+
+const rotatePoint = ({ x, y }, rad) => {
+  const rcos = Math.cos(rad);
+  const rsin = Math.sin(rad);
+  return { x: x * rcos - y * rsin, y: y * rcos + x * rsin };
+};
+
+function rotateAroundCenter(node, rotation) {
+  const topLeft = { x: -node.width() / 2, y: -node.height() / 2 };
+  const current = rotatePoint(topLeft, Konva.getAngle(node.rotation()));
+  const rotated = rotatePoint(topLeft, Konva.getAngle(rotation));
+  return {
+    rotation,
+    x: node.x() + (rotated.x - current.x),
+    y: node.y() + (rotated.y - current.y),
+  };
 }
 
 export default {
@@ -249,8 +270,8 @@ export default {
       this.stuffLayer.batchDraw();
     },
     removeTransformer() {
-      this.transformer.setNodes([]);
-      this.transformerLayer.batchDraw();
+      this.transformer?.setNodes([]);
+      this.transformerLayer?.batchDraw();
     },
     removeItem(item) {
       if (this.activeShape === item.id) {
@@ -294,28 +315,36 @@ export default {
     },
     async updateAttribute(attribute, value) {
       const { config, node, shape, phantom } = this.activeItem;
-      config[attribute] = value;
-      if (shape === SHAPE_TEXT) {
-        node.setAttr(attribute, value);
-        const text = node.text();
-        const { height } = node.measureSize(text);
-        const lines = text.split('\n');
-        config.width = Math.max(...lines.map(lineText => node.measureSize(lineText).width));
-        config.height = lines.length * height;
-        config.scaleX = 1;
-        config.scaleY = 1;
-        config.x = node.attrs.x - ~~((config.width - node.attrs.width) / 2);
-        config.y = node.attrs.y - ~~((config.height - node.attrs.height) / 2);
+      if (attribute === 'rotation') {
+        const { rotation, x, y } = rotateAroundCenter(phantom, value);
+        config.rotation = rotation;
+        config.x = x;
+        config.y = y;
+      } else {
+        config[attribute] = value;
+        if (shape === SHAPE_TEXT) {
+          node.setAttr(attribute, value);
+          const text = node.text();
+          const { height } = node.measureSize(text);
+          const lines = text.split('\n');
+          config.width = Math.max(...lines.map(lineText => node.measureSize(lineText).width));
+          config.height = lines.length * height;
+          config.scaleX = 1;
+          config.scaleY = 1;
+          config.x = node.attrs.x - ~~((config.width - node.attrs.width) / 2);
+          config.y = node.attrs.y - ~~((config.height - node.attrs.height) / 2);
+        }
       }
       node.setAttrs(config);
       this.stuffLayer.batchDraw();
-      this.transformerLayer.batchDraw();
       this.updatePhantomSize(phantom, config);
     },
     updatePhantomSize(phantom, config) {
       const { x, y, width, height, scaleX, scaleY, rotation } = config;
       phantom.setAttrs({ x, y, width, height, scaleX, scaleY, rotation });
       this.controlLayer.batchDraw();
+      this.transformer.rotation(rotation);
+      this.transformerLayer.batchDraw();
     },
   },
   computed: {
@@ -360,7 +389,8 @@ export default {
         keepRatio: true,
         anchorSize: 10,
         rotationSnaps: snaps,
-        padding: 5
+        padding: 5,
+        rotation: 0,
       },
       activeShape: null,
       next: getCounter(),
