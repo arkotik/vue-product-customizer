@@ -76,6 +76,11 @@
               <TextForm :attrs="activeItem.node.attrs" :onInput="updateAttribute"/>
             </div>
           </template>
+          <template v-if="activeType === 'image'">
+            <div class="tools-group">
+              <ImageForm :attrs="activeItem.node.attrs" :onInput="updateAttribute" :filter="activeItem.filter"/>
+            </div>
+          </template>
         </div>
       </div>
     </div>
@@ -89,6 +94,15 @@
 import ColorPicker from '@/components/editor/ColorPicker';
 import Konva from 'konva';
 import TextForm from '@/components/editor/forms/TextForm';
+import ImageForm from '@/components/editor/forms/ImageForm';
+import { rgbToHEX } from '@/components/editor/helpers';
+
+const filtersMap = {
+  sepia: Konva.Filters.Sepia,
+  invert: Konva.Filters.Invert,
+  solarize: Konva.Filters.Solarize,
+  grayscale: Konva.Filters.Grayscale,
+};
 
 const snaps = Array(4)
   .fill([0, 30, 45, 60, 90])
@@ -166,7 +180,7 @@ function rotateAroundCenter(node, rotation) {
 
 export default {
   name: 'Editor',
-  components: { TextForm, ColorPicker },
+  components: { ImageForm, TextForm, ColorPicker },
   methods: {
     clearAll() {
       this.removeTransformer();
@@ -289,6 +303,7 @@ export default {
       const { width, height } = this.editorConfig;
       const item = { ...(extra || {}), shape, config, id: this.next() };
       if (shape === SHAPE_IMAGE) {
+        item.filter = 'none';
         item.node = new Konva.Image(config);
       } else if (shape === SHAPE_TEXT) {
         item.node = new Konva.Text(config);
@@ -313,8 +328,23 @@ export default {
       item.phantom.addEventListener('mousedown', () => this.setActive(item));
       this.setActive(item);
     },
-    async updateAttribute(attribute, value) {
+    updateAttribute(attribute, value) {
       const { config, node, shape, phantom } = this.activeItem;
+      if (attribute.startsWith('__')) {
+        if (attribute === '__filter') {
+          this.activeItem.filter = value;
+          if (value === 'none') {
+            node.clearCache();
+            node.filters([]);
+            this.stuffLayer.batchDraw();
+          } else if (value in filtersMap) {
+            node.cache();
+            node.filters([filtersMap[value]]);
+            this.stuffLayer.batchDraw();
+          }
+        }
+        return;
+      }
       if (attribute === 'rotation') {
         const { rotation, x, y } = rotateAroundCenter(phantom, value);
         config.rotation = rotation;
@@ -461,10 +491,12 @@ export default {
       this.removeTransformer();
       this.settingsTabs.active = 'tab-product';
     });
+    setTimeout(() => {
+      const pixel = 0;
+      const [r, g, b, a] = this.$refs.tplLayer.getNode().children[0].getContext().getImageData(pixel, pixel, 1, 1).data;
+      const hex = rgbToHEX({ r, g, b, a });
+      document.body.style.setProperty('background-color', hex);
+    }, 100);
   },
 };
 </script>
-
-<style scoped>
-
-</style>

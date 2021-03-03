@@ -1,6 +1,6 @@
 <!--suppress HtmlFormInputWithoutLabel -->
 <template>
-  <div class="text-form-wrapper">
+  <div class="text-form form-wrapper">
     <div>
       <div class="input-group">
         <span class="input-label">Text</span>
@@ -30,6 +30,18 @@ export default {
   props: {
     attrs: Object,
     onInput: Function,
+  },
+  watch: {
+    attrs: {
+      handler(attrs) {
+        this.conf = {
+          ...attrs,
+          fill: this.rgb(attrs.fill),
+          rotation: attrs.rotation < 0 ? 360 + attrs.rotation : attrs.rotation,
+        };
+      },
+      deep: true,
+    }
   },
   computed: {
     fontsList() {
@@ -78,12 +90,12 @@ export default {
 };
 </script>
 
-<style type="text/css" lang="scss" scoped>
-.text-form-wrapper {
+<style type="text/css" lang="scss">
+.form-wrapper {
   padding: 0 5px;
 
-  & > div {
-    margin-bottom: 15px;
+  &.text-form > div {
+    margin-bottom: 5px;
   }
 }
 </style>

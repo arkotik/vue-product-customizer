@@ -9,7 +9,7 @@
     </div>
     <div class="values-row">
       <span class="value-label min">{{ min }}</span>
-      <span class="value-label value">{{ value }}</span>
+      <span class="value-label value">{{ roundVal(value, 0) }}</span>
       <span class="value-label max">{{ max }}</span>
     </div>
   </div>
