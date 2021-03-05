@@ -53,6 +53,8 @@ export default {
 
 <style type="text/css" lang="scss">
 .image-form {
+  padding: 10px;
+
   .image-filters {
     display: grid;
     grid-template-columns: repeat(auto-fill,minmax(70px,1fr));

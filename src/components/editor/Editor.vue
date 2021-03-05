@@ -21,16 +21,18 @@
                 </svg>
               </div>
             </div>
-            <div class="content">
-              <div class="title">{{ item.shape }}</div>
-              <div class="actions">
-                <button class="action action-button to-top" title="Bring to Front" @click.stop="arrangeItem(item, Infinity)" :disabled="shapes.length < 2"/>
-                <button class="action action-button up" title="Forward One" @click.stop="arrangeItem(item, 1)" :disabled="shapes.length < 2"/>
-                <button class="action action-button down" title="Back One" @click.stop="arrangeItem(item, -1)" :disabled="shapes.length < 2"/>
-                <button class="action action-button to-bottom" title="Send to Back" @click.stop="arrangeItem(item, -Infinity)" :disabled="shapes.length < 2"/>
-                <div class="divider"/>
-                <button class="action action-button remove" title="Remove" @click.stop="removeItem(item)"/>
-              </div>
+            <div class="title">{{ item.shape }}</div>
+            <div class="action action-button remove" title="Remove" @click.stop="removeItem(item)">
+              <i>
+                <svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" viewBox="0 0 1000 1000" enable-background="new 0 0 1000 1000" xml:space="preserve">
+                      <g fill="#787878">
+                        <path d="M685.9,329h-45c-10,0-18.3,8.3-18.3,18.3V827c0,10.1,8.3,18.3,18.3,18.3h45c10,0,18.3-8.3,18.3-18.3V347.3C704.2,337.2,695.9,329,685.9,329z"/>
+                        <path d="M971.7,173.3H729.1L687.5,65.7C674.3,31.5,643,10,606.3,10H393.8c-36.8,0-68,21.5-81.2,55.7L271,173.3H28.3c-10,0-18.3,8.3-18.3,18.3v45.1c0,10,8.3,18.3,18.3,18.3h104.2v626.5c0,59.7,48.8,108.5,108.5,108.5H759c59.7,0,108.5-48.8,108.5-108.5V255h104.2c10,0,18.3-8.3,18.3-18.3v-45.1C990.1,181.6,981.8,173.3,971.7,173.3z M371.9,118.1c6.6-17.1,22.3-27.9,40.7-27.9h174.9c18.4,0,34.1,10.7,40.6,27.9l21.4,55.2H350.6L371.9,118.1z M786,870.6c0,20.8-17,37.8-37.8,37.8H251.9c-20.8,0-37.7-17-37.7-37.8V255H786V870.6z"/>
+                        <path d="M359.2,329h-45c-10.1,0-18.3,8.3-18.3,18.3V827c0,10.1,8.2,18.3,18.3,18.3h45c10,0,18.3-8.3,18.3-18.3V347.3C377.6,337.2,369.3,329,359.2,329z"/>
+                        <path d="M522.5,329h-45c-10,0-18.3,8.3-18.3,18.3V827c0,10.1,8.3,18.3,18.3,18.3h45c10.1,0,18.4-8.3,18.4-18.3V347.3C540.9,337.2,532.6,329,522.5,329z"/>
+                      </g>
+                    </svg>
+              </i>
             </div>
           </div>
         </template>
@@ -62,7 +64,7 @@
       <div class="tools-handler" :class="[`${settingsTabs.active}-content`]">
         <div class="tools-panel" v-if="settingsTabs.active === 'tab-product'">
           <div class="tools-group">
-            <div style="padding: 0 5px">
+            <div style="padding: 0 10px">
               <ColorPicker title="Background" v-model="underlayConfig.fill"/>
             </div>
           </div>
@@ -71,6 +73,9 @@
           <template v-if="activeShape === null">
             <span style="text-align: center; padding: 15px 0;">Please select an objet</span>
           </template>
+          <div class="tools-group" v-if="activeShape !== null">
+            <TransformForm :node="activeItem.node" :onInput="updateAttribute" style="border-bottom: 1px solid #98a0b1;" :on-arrange="to => arrangeItem(activeItem, to)"/>
+          </div>
           <template v-if="activeType === 'text'">
             <div class="tools-group">
               <TextForm :attrs="activeItem.node.attrs" :onInput="updateAttribute"/>
@@ -91,11 +96,14 @@
 </template>
 
 <script>
+/* eslint-disable no-unused-vars */
+
 import ColorPicker from '@/components/editor/ColorPicker';
 import Konva from 'konva';
 import TextForm from '@/components/editor/forms/TextForm';
 import ImageForm from '@/components/editor/forms/ImageForm';
-import { rgbToHEX } from '@/components/editor/helpers';
+// import { rgbToHEX } from '@/components/editor/helpers';
+import TransformForm from '@/components/editor/forms/TransformForm';
 
 const filtersMap = {
   sepia: Konva.Filters.Sepia,
@@ -154,33 +162,32 @@ const listenersMap = [
   ['rotationChange', 'rotation'],
 ];
 
-// eslint-disable-next-line no-unused-vars
-async function sleep(t = 0) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, t);
-  });
-}
-
-const rotatePoint = ({ x, y }, rad) => {
-  const rcos = Math.cos(rad);
-  const rsin = Math.sin(rad);
-  return { x: x * rcos - y * rsin, y: y * rcos + x * rsin };
-};
-
-function rotateAroundCenter(node, rotation) {
-  const topLeft = { x: -node.width() / 2, y: -node.height() / 2 };
-  const current = rotatePoint(topLeft, Konva.getAngle(node.rotation()));
-  const rotated = rotatePoint(topLeft, Konva.getAngle(rotation));
-  return {
-    rotation,
-    x: node.x() + (rotated.x - current.x),
-    y: node.y() + (rotated.y - current.y),
-  };
-}
+// async function sleep(t = 0) {
+//   return new Promise((resolve) => {
+//     setTimeout(resolve, t);
+//   });
+// }
+//
+// const rotatePoint = ({ x, y }, rad) => {
+//   const rcos = Math.cos(rad);
+//   const rsin = Math.sin(rad);
+//   return { x: x * rcos - y * rsin, y: y * rcos + x * rsin };
+// };
+//
+// function rotateAroundCenter(node, rotation) {
+//   const topLeft = { x: -node.width() / 2, y: -node.height() / 2 };
+//   const current = rotatePoint(topLeft, Konva.getAngle(node.rotation()));
+//   const rotated = rotatePoint(topLeft, Konva.getAngle(rotation));
+//   return {
+//     rotation,
+//     x: node.x() + (rotated.x - current.x),
+//     y: node.y() + (rotated.y - current.y),
+//   };
+// }
 
 export default {
   name: 'Editor',
-  components: { ImageForm, TextForm, ColorPicker },
+  components: { TransformForm, ImageForm, TextForm, ColorPicker },
   methods: {
     clearAll() {
       this.removeTransformer();
@@ -224,7 +231,7 @@ export default {
       this.transformerLayer.batchDraw();
     },
     getPhantomConfig(item) {
-      const { shape, config: { image, x, y, scaleX, scaleY, width, height } } = item;
+      const { shape, config: { image, x, y, scaleX, scaleY, width, height, offsetX, offsetY } } = item;
       const data = {
         x,
         y,
@@ -232,6 +239,8 @@ export default {
         scaleY,
         width,
         height,
+        offsetX,
+        offsetY,
         draggable: true,
         strokeWidth: 1,
         strokeEnabled: false,
@@ -260,6 +269,7 @@ export default {
     setActive(item) {
       this.setTransformer(item);
       this.settingsTabs.active = 'tab-object';
+      window.activeNode = item.node;
     },
     setTransformer(item) {
       const { phantom, node, config, id, shape } = item;
@@ -311,8 +321,10 @@ export default {
         const th = item.node.height();
         config.width = tw;
         config.height = th;
-        config.x = ~~((width / 2) - (tw / 2));
-        config.y = ~~((height / 2) - (th / 2));
+        config.x = ~~((width / 2));
+        config.y = ~~((height / 2));
+        config.offsetX = config.width / 2;
+        config.offsetY =config.height / 2;
         item.node.setAttrs(config);
       }
       item.phantom = new Konva.Rect(this.getPhantomConfig(item));
@@ -346,10 +358,10 @@ export default {
         return;
       }
       if (attribute === 'rotation') {
-        const { rotation, x, y } = rotateAroundCenter(phantom, value);
-        config.rotation = rotation;
-        config.x = x;
-        config.y = y;
+        // const { rotation, x, y } = rotateAroundCenter(phantom, value);
+        config.rotation = value;
+        // config.x = x;
+        // config.y = y;
       } else {
         config[attribute] = value;
         if (shape === SHAPE_TEXT) {
@@ -359,8 +371,10 @@ export default {
           const lines = text.split('\n');
           config.width = Math.max(...lines.map(lineText => node.measureSize(lineText).width));
           config.height = lines.length * height;
-          config.scaleX = 1;
-          config.scaleY = 1;
+          if (!attribute.startsWith('scale')) {
+            config.scaleX = 1;
+            config.scaleY = 1;
+          }
           config.x = node.attrs.x - ~~((config.width - node.attrs.width) / 2);
           config.y = node.attrs.y - ~~((config.height - node.attrs.height) / 2);
         }
@@ -475,11 +489,13 @@ export default {
         const scale = fit < size ? fit / size : 1;
         this.addShape(SHAPE_IMAGE, {
           image: img,
-          x: 10,
-          y: 10,
+          x: width / 2,
+          y: height / 2,
           scaleX: scale,
           scaleY: scale,
           draggable: false,
+          offsetX: img.width / 2,
+          offsetY: img.height / 2,
         });
         this.$refs.imageForm.reset();
       };
@@ -491,12 +507,12 @@ export default {
       this.removeTransformer();
       this.settingsTabs.active = 'tab-product';
     });
-    setTimeout(() => {
-      const pixel = 0;
-      const [r, g, b, a] = this.$refs.tplLayer.getNode().children[0].getContext().getImageData(pixel, pixel, 1, 1).data;
-      const hex = rgbToHEX({ r, g, b, a });
-      document.body.style.setProperty('background-color', hex);
-    }, 100);
+    // setTimeout(() => {
+    //   const pixel = 0;
+    //   const [r, g, b, a] = this.$refs.tplLayer.getNode().children[0].getContext().getImageData(pixel, pixel, 1, 1).data;
+    //   const hex = rgbToHEX({ r, g, b, a });
+    //   document.body.style.setProperty('background-color', hex);
+    // }, 100);
   },
 };
 </script>

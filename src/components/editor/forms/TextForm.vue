@@ -91,10 +91,10 @@ export default {
 </script>
 
 <style type="text/css" lang="scss">
-.form-wrapper {
-  padding: 0 5px;
+.text-form {
+  padding: 10px;
 
-  &.text-form > div {
+  & > div {
     margin-bottom: 5px;
   }
 }
