@@ -65,7 +65,7 @@
         <div class="tools-panel" v-if="settingsTabs.active === 'tab-product'">
           <div class="tools-group">
             <div style="padding: 0 10px">
-              <ColorPicker title="Background" v-model="underlayConfig.fill"/>
+              <ColorPicker title="Background" @change="fill => updateUnderlay({ fill })"/>
             </div>
           </div>
         </div>
@@ -74,7 +74,7 @@
             <span style="text-align: center; padding: 15px 0;">Please select an objet</span>
           </template>
           <div class="tools-group" v-if="activeShape !== null">
-            <TransformForm :node="activeItem.node" :onInput="updateAttribute" style="border-bottom: 1px solid #98a0b1;" :on-arrange="to => arrangeItem(activeItem, to)"/>
+            <TransformForm :node="activeItem.node" :on-transform="updateAttribute" style="border-bottom: 1px solid #98a0b1;" :on-arrange="to => arrangeItem(activeItem, to)"/>
           </div>
           <template v-if="activeType === 'text'">
             <div class="tools-group">
@@ -98,12 +98,13 @@
 <script>
 /* eslint-disable no-unused-vars */
 
+// import { rgbToHEX } from '@/components/editor/helpers';
 import ColorPicker from '@/components/editor/ColorPicker';
 import Konva from 'konva';
 import TextForm from '@/components/editor/forms/TextForm';
 import ImageForm from '@/components/editor/forms/ImageForm';
-// import { rgbToHEX } from '@/components/editor/helpers';
 import TransformForm from '@/components/editor/forms/TransformForm';
+import EditorHistory from '@/components/editor/EditorHistory';
 
 const filtersMap = {
   sepia: Konva.Filters.Sepia,
@@ -112,12 +113,14 @@ const filtersMap = {
   grayscale: Konva.Filters.Grayscale,
 };
 
+let editorHistory;
+
 const snaps = Array(4)
   .fill([0, 30, 45, 60, 90])
   .reduce((acc, cur, i) => [...acc, ...cur.map(el => el + (i * 90))], []);
 
-function getCounter() {
-  let i = 0;
+function getCounter(start = 0) {
+  let i = start;
   return () => i++;
 }
 
@@ -190,8 +193,7 @@ export default {
   components: { TransformForm, ImageForm, TextForm, ColorPicker },
   methods: {
     clearAll() {
-      this.removeTransformer();
-      this.activeShape = null;
+      this.clearActive();
       for (const { node, phantom } of this.shapes) {
         node.destroy();
         phantom.destroy();
@@ -199,6 +201,7 @@ export default {
       this.controlLayer.batchDraw();
       this.stuffLayer.batchDraw();
       this.shapes = [];
+      this.pushHistory();
     },
     getItemById(id) {
       return this.shapes.find(el => el.id === id);
@@ -229,6 +232,7 @@ export default {
       this.stuffLayer.batchDraw();
       this.controlLayer.batchDraw();
       this.transformerLayer.batchDraw();
+      this.pushHistory();
     },
     getPhantomConfig(item) {
       const { shape, config: { image, x, y, scaleX, scaleY, width, height, offsetX, offsetY } } = item;
@@ -288,12 +292,15 @@ export default {
         node.draw();
         this.stuffLayer.draw();
       }));
+      phantom.addEventListener('dragend', this.pushHistory);
+      this.transformer.addEventListener('mouseup', this.pushHistory);
       this.$set(this.$data, 'transformerConfig', { ...this.transformerConfig, resizeEnabled: shape !== SHAPE_TEXT });
       this.transformer?.setNodes([phantom]);
       this.transformerLayer.batchDraw();
       this.stuffLayer.batchDraw();
     },
     removeTransformer() {
+      this.activeShape = null;
       this.transformer?.setNodes([]);
       this.transformerLayer?.batchDraw();
     },
@@ -308,42 +315,53 @@ export default {
       this.shapes = this.shapes.filter(el => el.id !== item.id);
       this.stuffLayer.batchDraw();
       this.controlLayer.batchDraw();
+      this.pushHistory();
     },
-    addShape(shape, config, extra = {}) {
+    createItem(shape, { filter, ...config }, auto = true) {
       const { width, height } = this.editorConfig;
-      const item = { ...(extra || {}), shape, config, id: this.next() };
+      const item = { shape, config, id: this.next() };
       if (shape === SHAPE_IMAGE) {
-        item.filter = 'none';
+        item.filter = filter || 'none';
         item.node = new Konva.Image(config);
+        if (item.filter in filtersMap) {
+          item.node.cache();
+          item.node.filters([filtersMap[item.filter]]);
+        }
       } else if (shape === SHAPE_TEXT) {
         item.node = new Konva.Text(config);
-        const tw = item.node.getTextWidth();
-        const th = item.node.height();
-        config.width = tw;
-        config.height = th;
-        config.x = ~~((width / 2));
-        config.y = ~~((height / 2));
-        config.offsetX = config.width / 2;
-        config.offsetY =config.height / 2;
-        item.node.setAttrs(config);
+        if (auto) {
+          const tw = item.node.getTextWidth();
+          const th = item.node.height();
+          config.width = tw;
+          config.height = th;
+          config.x = ~~((width / 2));
+          config.y = ~~((height / 2));
+          config.offsetX = config.width / 2;
+          config.offsetY =config.height / 2;
+          item.node.setAttrs(config);
+        }
       }
       item.phantom = new Konva.Rect(this.getPhantomConfig(item));
-
+      item.phantom.addEventListener('mousedown', () => this.setActive(item));
+      return item;
+    },
+    addShape(shape, config) {
+      const item = this.createItem(shape, config);
       this.controlLayer.add(item.phantom);
       this.stuffLayer.add(item.node);
-
       this.stuffLayer.batchDraw();
       this.controlLayer.batchDraw();
-
       this.shapes.unshift(item);
-
-      item.phantom.addEventListener('mousedown', () => this.setActive(item));
+      // item.phantom.addEventListener('mousedown', () => this.setActive(item));
       this.setActive(item);
+      this.pushHistory();
     },
     updateAttribute(attribute, value) {
       const { config, node, shape, phantom } = this.activeItem;
+      let push = false;
       if (attribute.startsWith('__')) {
         if (attribute === '__filter') {
+          push = this.activeItem.filter !== value;
           this.activeItem.filter = value;
           if (value === 'none') {
             node.clearCache();
@@ -355,13 +373,12 @@ export default {
             this.stuffLayer.batchDraw();
           }
         }
+        push && this.pushHistory();
         return;
       }
+      push = config[attribute] !== value;
       if (attribute === 'rotation') {
-        // const { rotation, x, y } = rotateAroundCenter(phantom, value);
         config.rotation = value;
-        // config.x = x;
-        // config.y = y;
       } else {
         config[attribute] = value;
         if (shape === SHAPE_TEXT) {
@@ -382,6 +399,7 @@ export default {
       node.setAttrs(config);
       this.stuffLayer.batchDraw();
       this.updatePhantomSize(phantom, config);
+      push && this.pushHistory();
     },
     updatePhantomSize(phantom, config) {
       const { x, y, width, height, scaleX, scaleY, rotation } = config;
@@ -390,6 +408,111 @@ export default {
       this.transformer.rotation(rotation);
       this.transformerLayer.batchDraw();
     },
+    hotkeysHandler(e) {
+      const { shiftKey, ctrlKey, code } = e;
+      if (ctrlKey) {
+        if (!shiftKey && code === 'KeyZ') {
+          e.preventDefault();
+          this.loadState(editorHistory.back());
+        }
+        if ((shiftKey && code === 'KeyZ') || (!shiftKey && code === 'KeyY')) {
+          e.preventDefault();
+          this.loadState(editorHistory.forward());
+        }
+      } else if (this.activeShape !== null && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape', 'Space', 'Delete'].includes(code)) {
+        e.preventDefault();
+        const { x, y } = this.activeItem.node.position();
+        const delta = shiftKey ? 10 : 1;
+        switch (code) {
+          case 'ArrowUp':
+            this.updateAttribute('y', y - delta);
+            break;
+          case 'ArrowDown':
+            this.updateAttribute('y', y + delta);
+            break;
+          case 'ArrowLeft':
+            this.updateAttribute('x', x - delta);
+            break;
+          case 'ArrowRight':
+            this.updateAttribute('x', x + delta);
+            break;
+          case 'Space':
+            ((currentIndex) => {
+              let idx = currentIndex + 1;
+              if (idx > this.shapes.length - 1) {
+                idx = 0;
+              }
+              this.setActive(this.shapes[Math.max(0, idx)]);
+            })(this.shapes.findIndex(el => el.id === this.activeShape));
+            break;
+          case 'Escape':
+            this.clearActive();
+            break;
+          case 'Delete':
+            this.removeItem(this.activeItem);
+            break;
+        }
+      }
+    },
+    dumpState() {
+      const objects = this.shapes.map(({ shape, config: { image, ...config }, id, node, filter }) => {
+        const { x, y } = node.position();
+        const { width, height } = node.size();
+        const { x: scaleX, y: scaleY } = node.scale();
+        const { x: offsetX, y: offsetY } = node.offset();
+        const rotation = node.rotation();
+        const data = { shape, filter, config: { ...config, x, y, width, height, scaleX, scaleY, offsetX, offsetY, rotation } };
+        if (shape === SHAPE_IMAGE) {
+          data.image = image.src;
+        }
+        return [id, data];
+      });
+      return JSON.stringify({ objects, underlay: this.underlayConfig });
+    },
+    pushHistory() {
+      console.log('push');
+      editorHistory.pushState(this.dumpState());
+    },
+    loadState(state) {
+      if (!state) {
+        return;
+      }
+      const { underlay, objects } = JSON.parse(state);
+      const prev = new Map(objects);
+      const shapes = [];
+      let max = 0;
+      this.clearActive();
+      for (const { node, phantom } of this.shapes) {
+        node.destroy();
+        phantom.destroy();
+      }
+      for (const [id, { shape, config, image, filter }] of prev) {
+        max = Math.max(max, id);
+        if (shape === SHAPE_IMAGE) {
+          config.image = new window.Image();
+          config.image.src = image;
+          config.filter = filter;
+        }
+        const item = this.createItem(shape, config, false);
+        this.controlLayer.add(item.phantom);
+        this.stuffLayer.add(item.node);
+        shapes.push(item);
+      }
+      this.shapes = shapes;
+      this.$set(this.$data, 'underlayConfig', underlay);
+      this.next = getCounter(max + 1);
+      this.stuffLayer.batchDraw();
+      this.controlLayer.batchDraw();
+    },
+    clearActive() {
+      this.activeShape = null;
+      this.removeTransformer();
+      this.settingsTabs.active = 'tab-product';
+    },
+    updateUnderlay(data) {
+      this.underlayConfig = { ...this.underlayConfig, ...data };
+      this.pushHistory();
+    }
   },
   computed: {
     transformer() {
@@ -402,7 +525,7 @@ export default {
       return this.$refs.controlLayer.getNode();
     },
     transformerLayer() {
-      return this.$refs.transformerLayer.getNode();
+      return this.$refs?.transformerLayer?.getNode();
     },
     activeItem() {
       return this.getItemById(this.activeShape) || null;
@@ -461,9 +584,12 @@ export default {
       };
       this.editorConfig.width = this.underlayConfig.width = tpl.width;
       this.editorConfig.height = this.underlayConfig.height = tpl.height;
+      this.pushHistory();
     };
   },
   mounted() {
+    editorHistory = new EditorHistory(100);
+    window.editorHistory = editorHistory;
     // const getDataUrl = async (file) => {
     //   const reader = new FileReader();
     //   return new Promise((resolve => {
@@ -502,11 +628,8 @@ export default {
     });
     this.$refs.canvasArea.addEventListener('click', e => e.stopPropagation());
     this.$refs.rightPanel.addEventListener('click', e => e.stopPropagation());
-    document.body.addEventListener('click', () => {
-      this.activeShape = null;
-      this.removeTransformer();
-      this.settingsTabs.active = 'tab-product';
-    });
+    document.body.addEventListener('click', this.clearActive);
+    window.addEventListener('keydown', this.hotkeysHandler);
     // setTimeout(() => {
     //   const pixel = 0;
     //   const [r, g, b, a] = this.$refs.tplLayer.getNode().children[0].getContext().getImageData(pixel, pixel, 1, 1).data;
