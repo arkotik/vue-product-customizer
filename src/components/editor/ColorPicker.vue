@@ -65,7 +65,7 @@ export default {
   },
   model: {
     prop: 'value',
-    event: 'change',
+    event: 'input',
   },
   computed: {
     normalized() {
@@ -96,9 +96,10 @@ export default {
     },
     tileClick(value) {
       this.emit(value, true);
+      this.emitChange();
     },
     onChange(e) {
-      `this.emit`(clearHash(e.target.value), true);
+      this.emit(clearHash(e.target.value), true);
     },
     onInput(e) {
       const { value } = e.target;
@@ -109,10 +110,19 @@ export default {
     emit(value, update = false) {
       const hex = normalizeHexColor(value);
       if (isValidHexColor(hex)) {
-        this.$emit('change', hex);
+        this.$emit('input', hex);
         if (update) {
           this.updatePipkasFromColor(hex);
         }
+      } else {
+        console.error(`Invalid value: ${hex}`);
+      }
+    },
+    emitChange() {
+      const hex = normalizeHexColor(this.value);
+      if (isValidHexColor(hex)) {
+        this.$emit('change', hex);
+        this.updatePipkasFromColor(hex);
       } else {
         console.error(`Invalid value: ${hex}`);
       }
@@ -155,18 +165,25 @@ export default {
         this.slider.left = h * 100;
         this.updateColor({ h });
       };
-      sliderTrack.onclick = updHandler;
+      // sliderTrack.onclick = updHandler;
       sliderPipka.onclick = (e) => {
         e.stopPropagation();
         e.preventDefault();
         return false;
       };
       const onUp = () => {
+        this.emitChange();
         window.removeEventListener('mousemove', updHandler);
         window.removeEventListener('mouseup', onUp);
       };
       sliderPipka.onmousedown = (e) => {
         e.stopPropagation();
+        window.addEventListener('mousemove', updHandler);
+        window.addEventListener('mouseup', onUp);
+      };
+      sliderTrack.onmousedown = (e) => {
+        e.stopPropagation();
+        updHandler(e);
         window.addEventListener('mousemove', updHandler);
         window.addEventListener('mouseup', onUp);
       };
@@ -217,13 +234,14 @@ export default {
         this.colorMap.bottom = v * 100;
         this.updateColor({ s, v });
       };
-      colorMap.onclick = updHandler;
+      // colorMap.onclick = updHandler;
       colorMapPipka.onclick = (e) => {
         e.stopPropagation();
         e.preventDefault();
         return false;
       };
       const onUp = () => {
+        this.emitChange();
         window.removeEventListener('mousemove', updHandler);
         window.removeEventListener('mouseup', onUp);
       };
@@ -232,6 +250,17 @@ export default {
         window.addEventListener('mousemove', updHandler);
         window.addEventListener('mouseup', onUp);
       };
+      colorMap.onmousedown = (e) => {
+        e.stopPropagation();
+        updHandler(e);
+        window.addEventListener('mousemove', updHandler);
+        window.addEventListener('mouseup', onUp);
+      };
+    },
+  },
+  watch: {
+    value(color) {
+      this.updatePipkasFromColor(color);
     },
   },
   data() {

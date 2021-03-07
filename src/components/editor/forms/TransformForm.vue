@@ -172,7 +172,6 @@ export default {
     node: Object,
     onTransform: Function,
     onArrange: Function,
-
   },
   methods: {
     transform(type, dir) {

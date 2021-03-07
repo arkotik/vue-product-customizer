@@ -5,14 +5,14 @@
       <div class="input-group">
         <span class="input-label">Text</span>
         <div class="input-field">
-          <textarea rows="4" v-model="conf.text" @input="submitText"/>
+          <textarea rows="4" v-model="conf.text" @input="submitText" @change="emitChange"/>
         </div>
       </div>
     </div>
     <DropDownList v-model="conf.fontFamily" :items="fontsList" title="Font style" @change="submitFontFamily"/>
-    <ColorPicker title="Color" v-model="conf.fill" @change="submitFill"/>
-    <RangeSlider title="Font Size" min="9" max="200" ticks="8" v-model="conf.fontSize" @change="submitFontSize"/>
-    <RangeSlider title="Rotation" min="0" max="360" ticks="6" v-model="conf.rotation" @change="submitRotation"/>
+    <ColorPicker title="Color" :value="conf.fill" @input="submitFill" @change="emitChange"/>
+    <RangeSlider title="Font Size" min="9" max="200" ticks="8" :value="conf.fontSize" @input="submitFontSize" @change="emitChange"/>
+    <RangeSlider title="Rotation" min="0" max="360" ticks="6" :value="conf.rotation" @input="submitRotation" @change="emitChange"/>
   </div>
 </template>
 
@@ -52,6 +52,9 @@ export default {
     }
   },
   methods: {
+    emitChange() {
+      this.$emit('change', this.attrs);
+    },
     findFont(name) {
       return FONTS_LIST.find(el => el.fontFamily === name);
     },
@@ -63,6 +66,7 @@ export default {
     },
     submitFontFamily(val) {
       this.submit('fontFamily', val);
+      this.emitChange();
     },
     submitFontSize(val) {
       this.submit('fontSize', val);

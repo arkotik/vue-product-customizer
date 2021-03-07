@@ -39,8 +39,14 @@ export default {
     }
   },
   methods: {
+    emitChange() {
+      this.$emit('change', this.attrs);
+    },
     setFilter(id) {
       this.submit('__filter', id);
+      if (this.filter !== id) {
+        this.emitChange();
+      }
     },
     submit(...args) {
       if (typeof this.onInput === 'function') {

@@ -28,7 +28,7 @@ export default class EditorHistory {
     this.#cursor += 1;
     return this.#history[this.#cursor];
   };
-  go = (delta) => {
+  go = (delta = 0) => {
     let pos = this.#cursor + delta;
     if (pos < 0) {
       pos = 0;
@@ -39,6 +39,9 @@ export default class EditorHistory {
     this.#cursor = pos;
     return this.#history[this.#cursor];
   };
+  getState() {
+    return this.#history[this.#cursor];
+  }
   get position() {
     return this.#cursor;
   }

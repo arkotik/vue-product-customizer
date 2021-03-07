@@ -7,7 +7,7 @@
           <div class="button primary" @click.stop="addText">+ Text</div>
         </div>
         <div class="buttons-group">
-          <div class="button danger" @click.stop="clearAll">Clear all</div>
+          <div class="button danger" @click.stop="onClearAll">Clear all</div>
         </div>
       </div>
       <div class="items-list">
@@ -38,15 +38,24 @@
         </template>
       </div>
     </div>
-    <div class="editor-area">
+    <div class="editor-area" ref="editorArea">
+      <div class="template-switcher">
+        <template v-for="(tpl, i) in templates">
+          <div class="template-variant" :key="i" :class="{ active: tpl.id === currentTemplate }" @click="setTemplate(tpl.id)">
+            <div class="tpl-thumb" :style="{ 'background-image': `url(${tpl.thumb})` }" />
+            <span class="tpl-title">{{ tpl.title }}</span>
+          </div>
+        </template>
+      </div>
       <div class="canvas-wrapper" ref="canvasArea">
-        <v-stage :config="editorConfig">
+        <v-stage :config="editorConfig" ref="stage">
           <v-layer ref="backLayer">
             <v-rect :config="underlayConfig" ref="underlay"/>
           </v-layer>
           <v-layer ref="stuffLayer"/>
           <v-layer ref="tplLayer">
             <v-image :config="tplImage"/>
+            <v-path :config="tplFrame" ref="tplFrame" />
           </v-layer>
           <v-layer ref="controlLayer"/>
           <v-layer ref="transformerLayer">
@@ -65,7 +74,7 @@
         <div class="tools-panel" v-if="settingsTabs.active === 'tab-product'">
           <div class="tools-group">
             <div style="padding: 0 10px">
-              <ColorPicker title="Background" @change="fill => updateUnderlay({ fill })"/>
+              <ColorPicker title="Background" @input="fill => updateUnderlay({ fill })" :value="underlayConfig.fill" @change="pushHistory"/>
             </div>
           </div>
         </div>
@@ -74,16 +83,21 @@
             <span style="text-align: center; padding: 15px 0;">Please select an objet</span>
           </template>
           <div class="tools-group" v-if="activeShape !== null">
-            <TransformForm :node="activeItem.node" :on-transform="updateAttribute" style="border-bottom: 1px solid #98a0b1;" :on-arrange="to => arrangeItem(activeItem, to)"/>
+            <TransformForm
+              :node="activeItem.node"
+              :on-transform="updateAttribute"
+              :on-arrange="to => arrangeItem(activeItem, to)"
+              style="border-bottom: 1px solid #98a0b1;"
+            />
           </div>
           <template v-if="activeType === 'text'">
             <div class="tools-group">
-              <TextForm :attrs="activeItem.node.attrs" :onInput="updateAttribute"/>
+              <TextForm :attrs="activeItem.node.attrs" :onInput="updateAttribute" @change="pushHistory"/>
             </div>
           </template>
           <template v-if="activeType === 'image'">
             <div class="tools-group">
-              <ImageForm :attrs="activeItem.node.attrs" :onInput="updateAttribute" :filter="activeItem.filter"/>
+              <ImageForm :attrs="activeItem.node.attrs" :onInput="updateAttribute" :filter="activeItem.filter" @change="pushHistory"/>
             </div>
           </template>
         </div>
@@ -92,6 +106,16 @@
     <form action="javascript:void(0)" ref="imageForm">
       <input type="file" accept="image/*" hidden ref="fileInput">
     </form>
+    <div class="status-bar" v-if="activeShape !== null">
+      <div class="position">
+        <span>X: {{ activeItem.node.x().toFixed(2) }}</span>
+        <span>Y: {{ activeItem.node.y().toFixed(2) }}</span>
+      </div>
+      <div class="size">
+        <span>W: {{ activeItem.node.width().toFixed(2) }}</span>
+        <span>H: {{ activeItem.node.height().toFixed(2) }}</span>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -113,8 +137,6 @@ const filtersMap = {
   grayscale: Konva.Filters.Grayscale,
 };
 
-let editorHistory;
-
 const snaps = Array(4)
   .fill([0, 30, 45, 60, 90])
   .reduce((acc, cur, i) => [...acc, ...cur.map(el => el + (i * 90))], []);
@@ -122,6 +144,25 @@ const snaps = Array(4)
 function getCounter(start = 0) {
   let i = start;
   return () => i++;
+}
+function bounded(num = 0, low = 0, high = 1) {
+  const _low = Math.min(low, high);
+  const _high = Math.max(low, high);
+  if (num < _low) {
+    return _low;
+  }
+  if (num > _high) {
+    return _high;
+  }
+  return num;
+}
+function downloadURI(uri, name) {
+  const link = document.createElement('a');
+  link.download = name;
+  link.href = uri;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 const SHAPE_IMAGE = 'image';
@@ -190,6 +231,9 @@ const listenersMap = [
 
 export default {
   name: 'Editor',
+  props: {
+    templates: Array,
+  },
   components: { TransformForm, ImageForm, TextForm, ColorPicker },
   methods: {
     clearAll() {
@@ -201,6 +245,9 @@ export default {
       this.controlLayer.batchDraw();
       this.stuffLayer.batchDraw();
       this.shapes = [];
+    },
+    onClearAll() {
+      this.clearAll();
       this.pushHistory();
     },
     getItemById(id) {
@@ -209,6 +256,9 @@ export default {
     getNodeById(id) {
       const { node: shape, phantom } = this.getItemById(id);
       return { phantom, shape };
+    },
+    getTemplateById(id) {
+      return this.templates.find(el => el.id === id);
     },
     arrangeItem(item, to) {
       const { phantom, shape } = this.getNodeById(item.id);
@@ -235,7 +285,8 @@ export default {
       this.pushHistory();
     },
     getPhantomConfig(item) {
-      const { shape, config: { image, x, y, scaleX, scaleY, width, height, offsetX, offsetY } } = item;
+      const { width: editorWidth, height: editorHeight } = this.editorConfig;
+      const { shape, config: { image, x, y, scaleX, scaleY, width, height } } = item;
       const data = {
         x,
         y,
@@ -243,12 +294,20 @@ export default {
         scaleY,
         width,
         height,
-        offsetX,
-        offsetY,
+        offsetX: width / 2,
+        offsetY: height / 2,
         draggable: true,
         strokeWidth: 1,
         strokeEnabled: false,
         stroke: '#000000',
+        dragBoundFunc: function ({ x, y }) {
+          const w = Math.abs(width * scaleX) * 0.4;
+          const h = Math.abs(height * scaleY) * 0.4;
+          return {
+            x: bounded(x, -w, editorWidth + w),
+            y: bounded(y, -h, editorHeight + h),
+          };
+        },
       };
       if (shape === 'image') {
         if (data.width === void 0) {
@@ -270,10 +329,13 @@ export default {
       });
       this.addShape(SHAPE_TEXT, config);
     },
-    setActive(item) {
+    setActive(id) {
+      const item = this.getItemById(id);
+      if (!item) {
+        return;
+      }
       this.setTransformer(item);
       this.settingsTabs.active = 'tab-object';
-      window.activeNode = item.node;
     },
     setTransformer(item) {
       const { phantom, node, config, id, shape } = item;
@@ -317,9 +379,12 @@ export default {
       this.controlLayer.batchDraw();
       this.pushHistory();
     },
-    createItem(shape, { filter, ...config }, auto = true) {
+    createItem(shape, { filter, id, ...config }, auto = true) {
       const { width, height } = this.editorConfig;
-      const item = { shape, config, id: this.next() };
+      const item = { shape, config, id };
+      if (id === void 0) {
+        item.id = this.next();
+      }
       if (shape === SHAPE_IMAGE) {
         item.filter = filter || 'none';
         item.node = new Konva.Image(config);
@@ -342,7 +407,7 @@ export default {
         }
       }
       item.phantom = new Konva.Rect(this.getPhantomConfig(item));
-      item.phantom.addEventListener('mousedown', () => this.setActive(item));
+      item.phantom.addEventListener('mousedown', () => this.setActive(item.id));
       return item;
     },
     addShape(shape, config) {
@@ -352,16 +417,13 @@ export default {
       this.stuffLayer.batchDraw();
       this.controlLayer.batchDraw();
       this.shapes.unshift(item);
-      // item.phantom.addEventListener('mousedown', () => this.setActive(item));
-      this.setActive(item);
+      this.setActive(item.id);
       this.pushHistory();
     },
     updateAttribute(attribute, value) {
       const { config, node, shape, phantom } = this.activeItem;
-      let push = false;
       if (attribute.startsWith('__')) {
         if (attribute === '__filter') {
-          push = this.activeItem.filter !== value;
           this.activeItem.filter = value;
           if (value === 'none') {
             node.clearCache();
@@ -373,10 +435,8 @@ export default {
             this.stuffLayer.batchDraw();
           }
         }
-        push && this.pushHistory();
         return;
       }
-      push = config[attribute] !== value;
       if (attribute === 'rotation') {
         config.rotation = value;
       } else {
@@ -392,18 +452,19 @@ export default {
             config.scaleX = 1;
             config.scaleY = 1;
           }
-          config.x = node.attrs.x - ~~((config.width - node.attrs.width) / 2);
-          config.y = node.attrs.y - ~~((config.height - node.attrs.height) / 2);
+          config.offsetX = config.width / 2;
+          config.offsetY = config.height / 2;
+          // config.x = node.attrs.x - ~~((config.width - node.attrs.width) / 2);
+          // config.y = node.attrs.y - ~~((config.height - node.attrs.height) / 2);
         }
       }
       node.setAttrs(config);
       this.stuffLayer.batchDraw();
       this.updatePhantomSize(phantom, config);
-      push && this.pushHistory();
     },
     updatePhantomSize(phantom, config) {
-      const { x, y, width, height, scaleX, scaleY, rotation } = config;
-      phantom.setAttrs({ x, y, width, height, scaleX, scaleY, rotation });
+      const { x, y, width, height, scaleX, scaleY, rotation, offsetX, offsetY } = config;
+      phantom.setAttrs({ x, y, width, height, scaleX, scaleY, rotation, offsetX, offsetY });
       this.controlLayer.batchDraw();
       this.transformer.rotation(rotation);
       this.transformerLayer.batchDraw();
@@ -413,11 +474,11 @@ export default {
       if (ctrlKey) {
         if (!shiftKey && code === 'KeyZ') {
           e.preventDefault();
-          this.loadState(editorHistory.back());
+          this.loadState(this.editorHistory.back());
         }
         if ((shiftKey && code === 'KeyZ') || (!shiftKey && code === 'KeyY')) {
           e.preventDefault();
-          this.loadState(editorHistory.forward());
+          this.loadState(this.editorHistory.forward());
         }
       } else if (this.activeShape !== null && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape', 'Space', 'Delete'].includes(code)) {
         e.preventDefault();
@@ -442,7 +503,7 @@ export default {
               if (idx > this.shapes.length - 1) {
                 idx = 0;
               }
-              this.setActive(this.shapes[Math.max(0, idx)]);
+              this.setActive(this.shapes[Math.max(0, idx)]?.id);
             })(this.shapes.findIndex(el => el.id === this.activeShape));
             break;
           case 'Escape':
@@ -467,17 +528,14 @@ export default {
         }
         return [id, data];
       });
-      return JSON.stringify({ objects, underlay: this.underlayConfig });
-    },
-    pushHistory() {
-      console.log('push');
-      editorHistory.pushState(this.dumpState());
+      return JSON.stringify({ objects, underlay: this.underlayConfig, active: this.activeShape });
     },
     loadState(state) {
       if (!state) {
         return;
       }
-      const { underlay, objects } = JSON.parse(state);
+      const { underlay, objects, active } = JSON.parse(state);
+      console.log({ underlay, objects, active });
       const prev = new Map(objects);
       const shapes = [];
       let max = 0;
@@ -487,6 +545,7 @@ export default {
         phantom.destroy();
       }
       for (const [id, { shape, config, image, filter }] of prev) {
+        config.id = id;
         max = Math.max(max, id);
         if (shape === SHAPE_IMAGE) {
           config.image = new window.Image();
@@ -503,6 +562,11 @@ export default {
       this.next = getCounter(max + 1);
       this.stuffLayer.batchDraw();
       this.controlLayer.batchDraw();
+      this.setActive(active);
+    },
+    pushHistory() {
+      console.log('pushed state');
+      this.editorHistory.pushState(this.dumpState());
     },
     clearActive() {
       this.activeShape = null;
@@ -511,7 +575,53 @@ export default {
     },
     updateUnderlay(data) {
       this.underlayConfig = { ...this.underlayConfig, ...data };
-      this.pushHistory();
+    },
+    setTemplateImage(id) {
+      const template = this.getTemplateById(id);
+      const tplImg = new window.Image();
+      tplImg.src = template.image;
+      tplImg.onload = () => {
+        const { width: editorWidth, height: editorHeight } = this.editorConfig;
+        const common = {
+          width: tplImg.width,
+          height: tplImg.height,
+          x: editorWidth / 2,
+          y: editorHeight / 2,
+          offsetX: tplImg.width / 2,
+          offsetY: tplImg.height / 2,
+          scaleX: 1,
+          scaleY: 1,
+        };
+        this.tplImage = { ...common, image: tplImg };
+        this.$set(this.$data, 'underlayConfig', { ...this.underlayConfig, ...common });
+        this.setTplFrameData(common);
+      };
+    },
+    setTemplate(id) {
+      this.clearAll();
+      this.currentTemplate = id;
+      this.setTemplateImage(id);
+      const history = this.histories.get(id);
+      this.loadState(history.getState());
+    },
+    setTplFrameData({ x, y, offsetX, offsetY }) {
+      const { width: editorWidth, height: editorHeight } = this.editorConfig;
+      const l = (x - offsetX) + 1;
+      const r = (x + offsetX) - 1;
+      const t = (y - offsetY) + 1;
+      const b = (y + offsetY) - 1;
+      this.tplFrame.data = `M0,0 L0,${editorWidth} L${editorWidth},${editorHeight} L${editorWidth},0z M${l},${t} L${r},${t} L${r},${b} L${l},${b}z`;
+    },
+    toDataURL(pixelRatio = 1) {
+      const { width: editorWidth, height: editorHeight } = this.editorConfig;
+      const { width, height } = this.tplImage;
+      return this.$refs.stage.getNode().toDataURL({
+        x: (editorWidth - width) / 2,
+        y: (editorHeight - height) / 2,
+        width,
+        height,
+        pixelRatio,
+      });
     }
   },
   computed: {
@@ -533,9 +643,14 @@ export default {
     activeType() {
       return this.activeItem?.shape || null;
     },
+    editorHistory() {
+      return this.histories.get(this.currentTemplate);
+    }
   },
   data() {
     return {
+      currentTemplate: null,
+      histories: new Map(),
       editorConfig: {
         width: 200,
         height: 200
@@ -550,6 +665,11 @@ export default {
       shapes: [],
       tplImage: {
         image: null
+      },
+      tplFrame: {
+        fill: '#F0F1F5',
+        strokeEnabled: false,
+        data: '',
       },
       transformerConfig: {
         nodes: [],
@@ -571,25 +691,10 @@ export default {
     };
   },
   created() {
-    const tpl = new window.Image();
-    const baseUrl = process.env.BASE_URL;
-    tpl.src = `${baseUrl}moto_G5_template.png`;
-    tpl.onload = () => {
-      this.tplImage = {
-        image: tpl,
-        x: 0,
-        y: 0,
-        scaleX: 1,
-        scaleY: 1,
-      };
-      this.editorConfig.width = this.underlayConfig.width = tpl.width;
-      this.editorConfig.height = this.underlayConfig.height = tpl.height;
-      this.pushHistory();
-    };
+    this.currentTemplate = (this.templates.find(tpl => !!tpl.default) || this.templates[0]).id;
+    this.histories = new Map(this.templates.map(tpl =>  [tpl.id, new EditorHistory(100)]));
   },
   mounted() {
-    editorHistory = new EditorHistory(100);
-    window.editorHistory = editorHistory;
     // const getDataUrl = async (file) => {
     //   const reader = new FileReader();
     //   return new Promise((resolve => {
@@ -600,6 +705,10 @@ export default {
     //     reader.readAsDataURL(file);
     //   }));
     // };
+    const { width, height } = this.$refs.editorArea.getBoundingClientRect();
+    this.editorConfig.width = width;
+    this.editorConfig.height = height;
+    this.setTemplateImage(this.currentTemplate);
     this.$refs.fileInput.addEventListener('change', (e) => {
       const [file] = e.target.files;
       if (!file) {
@@ -609,14 +718,17 @@ export default {
       const img = new window.Image();
       img.src = url;
       img.onload = () => {
-        const { width, height } = this.editorConfig;
+        const { width: editorWidth, height: editorHeight } = this.editorConfig;
+        const { width, height } = this.tplImage;
         const size = Math.max(img.width, img.height);
         const fit = Math.min(width, height);
         const scale = fit < size ? fit / size : 1;
         this.addShape(SHAPE_IMAGE, {
           image: img,
-          x: width / 2,
-          y: height / 2,
+          x: editorWidth / 2,
+          y: editorHeight / 2,
+          width: img.width,
+          height: img.height,
           scaleX: scale,
           scaleY: scale,
           draggable: false,
@@ -626,9 +738,9 @@ export default {
         this.$refs.imageForm.reset();
       };
     });
-    this.$refs.canvasArea.addEventListener('click', e => e.stopPropagation());
-    this.$refs.rightPanel.addEventListener('click', e => e.stopPropagation());
-    document.body.addEventListener('click', this.clearActive);
+    this.$refs.canvasArea.addEventListener('mousedown', e => e.stopPropagation());
+    this.$refs.rightPanel.addEventListener('mousedown', e => e.stopPropagation());
+    this.$refs.editorArea.addEventListener('mousedown', this.clearActive);
     window.addEventListener('keydown', this.hotkeysHandler);
     // setTimeout(() => {
     //   const pixel = 0;
@@ -636,6 +748,83 @@ export default {
     //   const hex = rgbToHEX({ r, g, b, a });
     //   document.body.style.setProperty('background-color', hex);
     // }, 100);
+    // window.exportStage = () => downloadURI(this.toDataURL(2), 'moto_g5.png');
+    // this.$refs.tplFrame.getNode().addEventListener('mousedown', () => {
+    //   this.clearActive();
+    // });
   },
 };
 </script>
+
+<style type="text/css" lang="scss" scoped>
+.status-bar {
+  position: absolute;
+  left: 340px;
+  bottom: 10px;
+  display: flex;
+  flex-direction: row;
+
+  .position, .size {
+    line-height: 1;
+
+    &:not(:last-child):after {
+      content: '|';
+      margin: 0 8px;
+    }
+
+    span {
+      vertical-align: middle;
+      font-family: monospace;
+
+      &:first-child {
+        margin-right: 10px;
+      }
+    }
+  }
+}
+.editor-area {
+  position: relative;
+}
+.template-switcher {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 5;
+  padding: 10px 0;
+  width: 100px;
+  display: flex;
+  flex-direction: column;
+
+  .template-variant {
+    width: 100%;
+    height: 100px;
+    border-radius: 4px;
+    background: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    border: 1px solid transparent;
+
+    &.active {
+      border: 1px solid var(--c-primary);
+    }
+
+    .tpl-title {
+      text-align: center;
+      font-size: smaller;
+      padding: 2px 0;
+    }
+
+    &:not(:first-child) {
+      margin-top: 10px;
+    }
+
+    .tpl-thumb {
+      width: 90%;
+      height: 90%;
+      background-size: cover;
+    }
+  }
+}
+</style>

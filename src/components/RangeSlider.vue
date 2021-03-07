@@ -22,7 +22,7 @@ export default {
   name: 'RangeSlider',
   model: {
     prop: 'value',
-    event: 'change',
+    event: 'input',
   },
   props: {
     title: String,
@@ -74,13 +74,13 @@ export default {
         const pos = calcPos(sliderTrack, { x: e.clientX });
         this.updateValue(pos);
       };
-      sliderTrack.onclick = updHandler;
       sliderPipka.onclick = (e) => {
         e.stopPropagation();
         e.preventDefault();
         return false;
       };
       const onUp = () => {
+        this.$emit('change', this.value);
         window.removeEventListener('mousemove', updHandler);
         window.removeEventListener('mouseup', onUp);
       };
@@ -89,12 +89,18 @@ export default {
         window.addEventListener('mousemove', updHandler);
         window.addEventListener('mouseup', onUp);
       };
+      sliderTrack.onmousedown = (e) => {
+        e.stopPropagation();
+        updHandler(e);
+        window.addEventListener('mousemove', updHandler);
+        window.addEventListener('mouseup', onUp);
+      };
     },
     updateValue(offset) {
       const { min, max } = this;
       const val = +min + Math.abs(max - min) * offset;
       this.pipkaLeft = offset * 100;
-      this.$emit('change', this.roundVal(val, this.precision));
+      this.$emit('input', this.roundVal(val, this.precision));
     },
     roundVal(val, precision) {
       return +(val.toFixed(precision));
