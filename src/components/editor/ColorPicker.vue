@@ -24,6 +24,11 @@
         <div class="color-map-pipka" ref="colorMapPipka" :style="{ left: `${colorMap.left}%`, bottom: `${colorMap.bottom}%` }"/>
       </div>
     </div>
+    <div class="color-palette">
+      <template v-for="(item, i) in defaultColors">
+        <div class="color-tile" :style="{ 'background-color': item.value }" :key="i" :title="item.title" @click="tileClick(item.value)" />
+      </template>
+    </div>
   </div>
 </template>
 
@@ -60,19 +65,41 @@ export default {
   },
   model: {
     prop: 'value',
-    event: 'change',
+    event: 'input',
   },
   computed: {
     normalized() {
       return clearHash(this.value);
     },
+    defaultColors() {
+      return [
+        { value: '#FFFFFF', title: 'White' },
+        { value: '#000000', title: 'Black' },
+        { value: '#23287A', title: 'Strong Navy' },
+        { value: '#8B4603', title: 'Deep Orange' },
+        { value: '#252654', title: 'Grayish Navy' },
+        { value: '#00470F', title: 'Deep Green' },
+        { value: '#CDCDCD', title: 'Light Gray' },
+        { value: '#70C4FF', title: 'Light Blue' },
+        { value: '#ED008E', title: 'Vivid Pink' },
+        { value: '#AB0F10', title: 'Strong Red' },
+        { value: '#FF7380', title: 'Light Red' },
+        { value: '#FEE101', title: 'Vivid Yellow' },
+        { value: '#75E6B0', title: 'Light Green' },
+        // { value: '', title: '' },
+      ];
+    }
   },
   methods: {
     submit() {
       this.emit(this.normalized, true);
     },
+    tileClick(value) {
+      this.emit(value, true);
+      this.emitChange();
+    },
     onChange(e) {
-      `this.emit`(clearHash(e.target.value), true);
+      this.emit(clearHash(e.target.value), true);
     },
     onInput(e) {
       const { value } = e.target;
@@ -83,10 +110,19 @@ export default {
     emit(value, update = false) {
       const hex = normalizeHexColor(value);
       if (isValidHexColor(hex)) {
-        this.$emit('change', hex);
+        this.$emit('input', hex);
         if (update) {
           this.updatePipkasFromColor(hex);
         }
+      } else {
+        console.error(`Invalid value: ${hex}`);
+      }
+    },
+    emitChange() {
+      const hex = normalizeHexColor(this.value);
+      if (isValidHexColor(hex)) {
+        this.$emit('change', hex);
+        this.updatePipkasFromColor(hex);
       } else {
         console.error(`Invalid value: ${hex}`);
       }
@@ -129,18 +165,25 @@ export default {
         this.slider.left = h * 100;
         this.updateColor({ h });
       };
-      sliderTrack.onclick = updHandler;
+      // sliderTrack.onclick = updHandler;
       sliderPipka.onclick = (e) => {
         e.stopPropagation();
         e.preventDefault();
         return false;
       };
       const onUp = () => {
+        this.emitChange();
         window.removeEventListener('mousemove', updHandler);
         window.removeEventListener('mouseup', onUp);
       };
       sliderPipka.onmousedown = (e) => {
         e.stopPropagation();
+        window.addEventListener('mousemove', updHandler);
+        window.addEventListener('mouseup', onUp);
+      };
+      sliderTrack.onmousedown = (e) => {
+        e.stopPropagation();
+        updHandler(e);
         window.addEventListener('mousemove', updHandler);
         window.addEventListener('mouseup', onUp);
       };
@@ -191,13 +234,14 @@ export default {
         this.colorMap.bottom = v * 100;
         this.updateColor({ s, v });
       };
-      colorMap.onclick = updHandler;
+      // colorMap.onclick = updHandler;
       colorMapPipka.onclick = (e) => {
         e.stopPropagation();
         e.preventDefault();
         return false;
       };
       const onUp = () => {
+        this.emitChange();
         window.removeEventListener('mousemove', updHandler);
         window.removeEventListener('mouseup', onUp);
       };
@@ -206,6 +250,17 @@ export default {
         window.addEventListener('mousemove', updHandler);
         window.addEventListener('mouseup', onUp);
       };
+      colorMap.onmousedown = (e) => {
+        e.stopPropagation();
+        updHandler(e);
+        window.addEventListener('mousemove', updHandler);
+        window.addEventListener('mouseup', onUp);
+      };
+    },
+  },
+  watch: {
+    value(color) {
+      this.updatePipkasFromColor(color);
     },
   },
   data() {
@@ -310,6 +365,24 @@ export default {
       bottom: 100%;
       transform: translateX(-50%) translateY(50%);
     }
+  }
+}
+
+.color-palette {
+  position: relative;
+  width: 100%;
+  margin: 15px 0;
+
+  display: grid;
+  grid-template-columns: repeat(auto-fill,36px);
+  grid-auto-rows: minmax(auto,36px);
+  grid-gap: 8px;
+
+  .color-tile {
+    border: 1px solid #535353;
+    position: relative;
+    border-radius: 4px;
+    cursor: pointer;
   }
 }
 </style>

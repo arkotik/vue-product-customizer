@@ -260,3 +260,15 @@ function toFloatRGBA(color) {
   const [r, g, b, a] = [rgb.r / 255, rgb.g / 255, rgb.b / 255, rgb.a / 255];
   return { r, g, b, a };
 }
+
+export function bounded(num = 0, low = 0, high = 1) {
+  const _low = Math.min(low, high);
+  const _high = Math.max(low, high);
+  if (num < _low) {
+    return _low;
+  }
+  if (num > _high) {
+    return _high;
+  }
+  return num;
+}

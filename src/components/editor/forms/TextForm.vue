@@ -1,18 +1,18 @@
 <!--suppress HtmlFormInputWithoutLabel -->
 <template>
-  <div class="text-form-wrapper">
+  <div class="text-form form-wrapper">
     <div>
       <div class="input-group">
         <span class="input-label">Text</span>
         <div class="input-field">
-          <textarea rows="4" v-model="conf.text" @input="submitText"/>
+          <textarea rows="4" v-model="conf.text" @input="submitText" @change="emitChange"/>
         </div>
       </div>
     </div>
     <DropDownList v-model="conf.fontFamily" :items="fontsList" title="Font style" @change="submitFontFamily"/>
-    <ColorPicker title="Color" v-model="conf.fill" @change="submitFill"/>
-    <RangeSlider title="Font Size" min="9" max="200" ticks="8" v-model="conf.fontSize" @change="submitFontSize"/>
-    <RangeSlider title="Rotation" min="0" max="360" ticks="6" v-model="conf.rotation" @change="submitRotation"/>
+    <ColorPicker title="Color" :value="conf.fill" @input="submitFill" @change="emitChange"/>
+    <RangeSlider title="Font Size" :min="9" :max="200" :ticks="8" :value="conf.fontSize" @input="submitFontSize" @change="emitChange"/>
+    <RangeSlider title="Rotation" :min="0" :max="360" :ticks="6" :value="conf.rotation" @input="submitRotation" @change="emitChange"/>
   </div>
 </template>
 
@@ -28,10 +28,25 @@ export default {
   name: 'TextForm',
   components: { RangeSlider, DropDownList, ColorPicker },
   props: {
-    attrs: Object,
+    node: Konva.Text,
     onInput: Function,
   },
+  watch: {
+    attrs: {
+      handler(attrs) {
+        this.conf = {
+          ...attrs,
+          fill: this.rgb(attrs.fill),
+          rotation: attrs.rotation < 0 ? 360 + attrs.rotation : attrs.rotation,
+        };
+      },
+      deep: true,
+    }
+  },
   computed: {
+    attrs() {
+      return this.node.getAttrs();
+    },
     fontsList() {
       return FONTS_LIST.map(font => {
         const { fontFamily: value } = font;
@@ -40,6 +55,9 @@ export default {
     }
   },
   methods: {
+    emitChange() {
+      this.$emit('change', this.attrs);
+    },
     findFont(name) {
       return FONTS_LIST.find(el => el.fontFamily === name);
     },
@@ -51,6 +69,7 @@ export default {
     },
     submitFontFamily(val) {
       this.submit('fontFamily', val);
+      this.emitChange();
     },
     submitFontSize(val) {
       this.submit('fontSize', val);
@@ -78,12 +97,12 @@ export default {
 };
 </script>
 
-<style type="text/css" lang="scss" scoped>
-.text-form-wrapper {
-  padding: 0 5px;
+<style type="text/css" lang="scss">
+.text-form {
+  padding: 10px;
 
   & > div {
-    margin-bottom: 15px;
+    margin-bottom: 5px;
   }
 }
 </style>
