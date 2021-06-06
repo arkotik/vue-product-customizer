@@ -13,14 +13,19 @@
         </template>
       </div>
     </div>
+    <RangeSlider title="Rotation" min="0" max="360" ticks="6" :value="attrs.rotation" @input="submitRotation" @change="emitChange"/>
   </div>
 </template>
 
 <script>
+import RangeSlider from '@/components/RangeSlider';
+import Konva from 'konva';
+
 export default {
   name: 'ImageForm',
+  components: { RangeSlider },
   props: {
-    attrs: Object,
+    node: Konva.Image,
     onInput: Function,
     filter: {
       type: String,
@@ -28,6 +33,9 @@ export default {
     },
   },
   computed: {
+    attrs() {
+      return this.node.getAttrs();
+    },
     filtersList() {
       return [
         { title: 'Original', id: 'none' },
@@ -39,6 +47,9 @@ export default {
     }
   },
   methods: {
+    submitRotation(val) {
+      this.submit('rotation', val);
+    },
     emitChange() {
       this.$emit('change', this.attrs);
     },

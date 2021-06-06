@@ -67,20 +67,22 @@
     <div class="panel right-panel" ref="rightPanel">
       <div class="tabs">
         <template v-for="(tab, i) in settingsTabs.tabs">
-          <div class="tab-tile" :class="{ active: tab.id === settingsTabs.active }" @click="settingsTabs.active = tab.id" :key="i">{{ tab.title }}</div>
+          <div class="tab-tile" :class="{ active: tab.id === settingsTabs.active }" @click="toggleTab(tab.id)" :key="i">{{ tab.title }}</div>
         </template>
       </div>
       <div class="tools-handler" :class="[`${settingsTabs.active}-content`]">
-        <div class="tools-panel" v-if="settingsTabs.active === 'tab-product'">
+        <div class="tools-panel" v-if="settingsTabs.active === TAB_PRODUCT">
           <div class="tools-group">
             <div style="padding: 0 10px">
               <ColorPicker title="Background" @input="fill => updateUnderlay({ fill })" :value="underlayConfig.fill" @change="pushHistory"/>
             </div>
           </div>
         </div>
-        <div class="tools-panel" v-if="settingsTabs.active === 'tab-object'">
+        <div class="tools-panel" v-if="settingsTabs.active === TAB_OBJECT">
           <template v-if="activeShape === null">
-            <span style="text-align: center; padding: 15px 0;">Please select an objet</span>
+            <div style="height: 100%; display: flex; align-items: center; justify-content: center;">
+              <span>Please select an objet</span>
+            </div>
           </template>
           <div class="tools-group" v-if="activeShape !== null">
             <TransformForm
@@ -92,12 +94,12 @@
           </div>
           <template v-if="activeType === 'text'">
             <div class="tools-group">
-              <TextForm :attrs="activeItem.node.attrs" :onInput="updateAttribute" @change="pushHistory"/>
+              <TextForm :node="activeItem.node" :onInput="updateAttribute" @change="pushHistory"/>
             </div>
           </template>
           <template v-if="activeType === 'image'">
             <div class="tools-group">
-              <ImageForm :attrs="activeItem.node.attrs" :onInput="updateAttribute" :filter="activeItem.filter" @change="pushHistory"/>
+              <ImageForm :node="activeItem.node" :filter="activeItem.filter" :onInput="updateAttribute" @change="pushHistory"/>
             </div>
           </template>
         </div>
@@ -129,6 +131,8 @@ import TextForm from '@/components/editor/forms/TextForm';
 import ImageForm from '@/components/editor/forms/ImageForm';
 import TransformForm from '@/components/editor/forms/TransformForm';
 import EditorHistory from '@/components/editor/EditorHistory';
+import { bounded } from '@/components/editor/helpers';
+import '../../assets/styles.scss';
 
 const filtersMap = {
   sepia: Konva.Filters.Sepia,
@@ -145,17 +149,6 @@ function getCounter(start = 0) {
   let i = start;
   return () => i++;
 }
-function bounded(num = 0, low = 0, high = 1) {
-  const _low = Math.min(low, high);
-  const _high = Math.max(low, high);
-  if (num < _low) {
-    return _low;
-  }
-  if (num > _high) {
-    return _high;
-  }
-  return num;
-}
 function downloadURI(uri, name) {
   const link = document.createElement('a');
   link.download = name;
@@ -167,6 +160,9 @@ function downloadURI(uri, name) {
 
 const SHAPE_IMAGE = 'image';
 const SHAPE_TEXT = 'text';
+
+const TAB_OBJECT = 'tab-object';
+const TAB_PRODUCT = 'tab-product';
 
 function getTextConfig(config = {}) {
   return {
@@ -236,6 +232,14 @@ export default {
   },
   components: { TransformForm, ImageForm, TextForm, ColorPicker },
   methods: {
+    toggleTab(id) {
+      if (this.settingsTabs.active !== id) {
+        this.settingsTabs.active = id;
+        if (id === TAB_PRODUCT) {
+          this.clearActive();
+        }
+      }
+    },
     clearAll() {
       this.clearActive();
       for (const { node, phantom } of this.shapes) {
@@ -286,7 +290,7 @@ export default {
     },
     getPhantomConfig(item) {
       const { width: editorWidth, height: editorHeight } = this.editorConfig;
-      const { shape, config: { image, x, y, scaleX, scaleY, width, height } } = item;
+      const { shape, config: { image, x, y, scaleX, scaleY, width, height, rotation } } = item;
       const data = {
         x,
         y,
@@ -294,6 +298,7 @@ export default {
         scaleY,
         width,
         height,
+        rotation,
         offsetX: width / 2,
         offsetY: height / 2,
         draggable: true,
@@ -329,15 +334,16 @@ export default {
       });
       this.addShape(SHAPE_TEXT, config);
     },
-    setActive(id) {
+    setActive(id, transformerConfig = {}) {
       const item = this.getItemById(id);
       if (!item) {
         return;
       }
-      this.setTransformer(item);
-      this.settingsTabs.active = 'tab-object';
+      this.setTransformer(item, transformerConfig);
+      this.settingsTabs.active = TAB_OBJECT;
     },
-    setTransformer(item) {
+    setTransformer(item, conf = {}) {
+      let transforming = false;
       const { phantom, node, config, id, shape } = item;
       const prev = this.activeShape;
       if (item.id === prev) {
@@ -349,16 +355,29 @@ export default {
         listenersMap.forEach(([event]) => phantom.removeEventListener(event));
       }
       listenersMap.forEach(([event, attribute]) => phantom.addEventListener(event, () => {
+        transforming = true;
         config[attribute] = phantom.attrs[attribute];
         node.setAttr(attribute, phantom.attrs[attribute]);
         node.draw();
+        phantom.draw();
         this.stuffLayer.draw();
+        this.controlLayer.draw();
       }));
       phantom.addEventListener('dragend', this.pushHistory);
-      this.transformer.addEventListener('mouseup', this.pushHistory);
-      this.$set(this.$data, 'transformerConfig', { ...this.transformerConfig, resizeEnabled: shape !== SHAPE_TEXT });
+      this.$refs.stage.getNode().addEventListener('mouseup', () => {
+        if (transforming) {
+          this.pushHistory();
+          transforming = false;
+        }
+      });
+      this.$set(this.$data, 'transformerConfig', {
+        ...this.transformerConfig,
+        ...(conf || {}),
+        resizeEnabled: shape !== SHAPE_TEXT
+      });
       this.transformer?.setNodes([phantom]);
       this.transformerLayer.batchDraw();
+      this.controlLayer.batchDraw();
       this.stuffLayer.batchDraw();
     },
     removeTransformer() {
@@ -535,16 +554,19 @@ export default {
         return;
       }
       const { underlay, objects, active } = JSON.parse(state);
-      console.log({ underlay, objects, active });
       const prev = new Map(objects);
       const shapes = [];
       let max = 0;
+      let activeConf;
       this.clearActive();
       for (const { node, phantom } of this.shapes) {
         node.destroy();
         phantom.destroy();
       }
       for (const [id, { shape, config, image, filter }] of prev) {
+        if (id === active) {
+          activeConf = config;
+        }
         config.id = id;
         max = Math.max(max, id);
         if (shape === SHAPE_IMAGE) {
@@ -571,7 +593,8 @@ export default {
     clearActive() {
       this.activeShape = null;
       this.removeTransformer();
-      this.settingsTabs.active = 'tab-product';
+      this.settingsTabs.active = TAB_PRODUCT;
+      this.$set(this.$data, 'transformerConfig', { ...this.transformerConfig, rotation: 0, offsetX: 0, offsetY: 0 });
     },
     updateUnderlay(data) {
       this.underlayConfig = { ...this.underlayConfig, ...data };
@@ -645,7 +668,9 @@ export default {
     },
     editorHistory() {
       return this.histories.get(this.currentTemplate);
-    }
+    },
+    TAB_OBJECT: () => TAB_OBJECT,
+    TAB_PRODUCT: () => TAB_PRODUCT,
   },
   data() {
     return {
@@ -667,7 +692,7 @@ export default {
         image: null
       },
       tplFrame: {
-        fill: '#F0F1F5',
+        fill: '#f0f2ef',
         strokeEnabled: false,
         data: '',
       },
@@ -682,10 +707,10 @@ export default {
       activeShape: null,
       next: getCounter(),
       settingsTabs: {
-        active: 'tab-product',
+        active: TAB_PRODUCT,
         tabs: [
-          { id: 'tab-product', title: 'Product' },
-          { id: 'tab-object', title: 'Object' },
+          { id: TAB_PRODUCT, title: 'Product' },
+          { id: TAB_OBJECT, title: 'Object' },
         ],
       }
     };
@@ -790,7 +815,6 @@ export default {
   left: 0;
   top: 0;
   z-index: 5;
-  padding: 10px 0;
   width: 100px;
   display: flex;
   flex-direction: column;

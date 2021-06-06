@@ -1,7 +1,6 @@
 import Vue from 'vue';
 import App from './App.vue';
 import VueKonva from 'vue-konva';
-import './assets/styles.scss';
 
 Vue.use(VueKonva);
 

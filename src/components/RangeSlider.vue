@@ -9,13 +9,19 @@
     </div>
     <div class="values-row">
       <span class="value-label min">{{ min }}</span>
-      <span class="value-label value">{{ roundVal(value, 0) }}</span>
+      <div class="controls-handler">
+        <div class="control-butt decrement" title="Decrement value" :class="{ disabled: +innerValue === +min }" @click.stop="add(-1)">-</div>
+        <span class="value-label value">{{ roundedValue }}</span>
+        <div class="control-butt increment" title="Increment value" :class="{ disabled: +innerValue === +max }" @click.stop="add(1)">+</div>
+      </div>
       <span class="value-label max">{{ max }}</span>
     </div>
   </div>
 </template>
 
 <script>
+import { bounded } from '@/components/editor/helpers';
+
 const DEFAULT_MIN = 0;
 
 export default {
@@ -52,10 +58,18 @@ export default {
       validator: (value) => !isNaN(+value),
     },
   },
+  watch: {
+    value(value) {
+      this.updPipkaPos(value);
+    },
+  },
   computed: {
     pipkaPos() {
       return `${this.pipkaLeft}%`;
-    }
+    },
+    roundedValue() {
+      return this.roundVal(this.innerValue, 0);
+    },
   },
   methods: {
     initSlider() {
@@ -74,13 +88,8 @@ export default {
         const pos = calcPos(sliderTrack, { x: e.clientX });
         this.updateValue(pos);
       };
-      sliderPipka.onclick = (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        return false;
-      };
       const onUp = () => {
-        this.$emit('change', this.value);
+        this.change(this.innerValue);
         window.removeEventListener('mousemove', updHandler);
         window.removeEventListener('mouseup', onUp);
       };
@@ -95,28 +104,56 @@ export default {
         window.addEventListener('mousemove', updHandler);
         window.addEventListener('mouseup', onUp);
       };
+      sliderTrack.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        updHandler(e);
+        window.addEventListener('mousemove', updHandler);
+        window.addEventListener('mouseup', onUp);
+      });
     },
     updateValue(offset) {
       const { min, max } = this;
       const val = +min + Math.abs(max - min) * offset;
       this.pipkaLeft = offset * 100;
-      this.$emit('input', this.roundVal(val, this.precision));
+      this.innerValue = val;
+      this.emit(val);
+    },
+    change(value) {
+      this.innerValue = value;
+      this.updPipkaPos(value);
+      this.$emit('change', this.emit(value));
+    },
+    add(delta) {
+      if (!delta) {
+        return;
+      }
+      this.change(this.innerValue + delta);
     },
     roundVal(val, precision) {
       return +(val.toFixed(precision));
+    },
+    emit(value) {
+      const _value = bounded(this.roundVal(value, this.precision), this.min, this.max);
+      this.$emit('input', _value);
+      return _value;
+    },
+    updPipkaPos(value) {
+      const { min, max, precision } = this;
+      this.innerValue = value;
+      this.pipkaLeft = this.roundVal((value - min) / (max - min) * 100, precision);
     },
   },
   data() {
     return {
       pipkaLeft: 0,
+      innerValue: 0,
     };
   },
   mounted() {
     this.initSlider();
   },
   created() {
-    const { min, max, value } = this;
-    this.pipkaLeft = this.roundVal((value - min) / (max - min) * 100, this.precision);
+    this.updPipkaPos(this.value);
   }
 };
 </script>
@@ -124,6 +161,7 @@ export default {
 <style type="text/css" lang="scss" scoped>
 .range-slider {
   --range-slider-ticks: 10;
+  user-select: none;
 
   .slider-wrapper {
     padding: 0;
@@ -208,6 +246,33 @@ export default {
       }
     }
 
+    .controls-handler {
+      display: flex;
+      flex-direction: row;
+
+      .control-butt {
+        border-radius: 4px;
+        width: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 10px;
+        font-size: large;
+        font-weight: bold;
+        line-height: 0.9em;
+        cursor: pointer;
+
+        &.disabled {
+          cursor: default;
+        }
+        &:not(.disabled):hover {
+          color: var(--c-primary);
+        }
+
+        //&.decrement {}
+        //&.increment {}
+      }
+    }
   }
 }
 </style>

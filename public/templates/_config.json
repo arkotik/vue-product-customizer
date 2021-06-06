@@ -1,0 +1,15 @@
+[
+  {
+    "id": "front",
+    "title": "Front side",
+    "image": "https://customizer.arkotik.com.ua/templates/t-shirt/front.png",
+    "thumb": "https://customizer.arkotik.com.ua/templates/t-shirt/front.thumb.png",
+    "default": true
+  },
+  {
+    "id": "back",
+    "title": "Back side",
+    "image": "https://customizer.arkotik.com.ua/templates/t-shirt/back.png",
+    "thumb": "https://customizer.arkotik.com.ua/templates/t-shirt/back.thumb.png"
+  }
+]
